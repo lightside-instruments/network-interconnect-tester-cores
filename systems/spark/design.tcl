@@ -67,8 +67,7 @@ CONFIG.RxLane0_Placement {DIFF_PAIR_1} \
 CONFIG.RxLane1_Placement {DIFF_PAIR_0} \
 CONFIG.Tx_In_Upper_Nibble {0} \
 CONFIG.ClockSelection {Async} \
-CONFIG.Ext_Management_Interface {true} \
-CONFIG.Auto_Negotiation {true}] [get_bd_cells eth_pcs_pma_0_1]
+CONFIG.Auto_Negotiation {false}] [get_bd_cells eth_pcs_pma_0_1]
 
 
 # Add the Lightside Instruments AS IP cores
@@ -168,6 +167,20 @@ connect_bd_net [get_bd_pins eth_pcs_pma_0_1/rx_dly_rdy] [get_bd_pins eth_pcs_pma
 connect_bd_net [get_bd_pins eth_pcs_pma_0_1/tx_vtc_rdy] [get_bd_pins eth_pcs_pma_shared/tx_vtc_rdy_1]
 connect_bd_net [get_bd_pins eth_pcs_pma_0_1/rx_vtc_rdy] [get_bd_pins eth_pcs_pma_shared/rx_vtc_rdy_1]
 
+# Workaround for not having the other 3 eth_pcs_pma instances
+connect_bd_net [get_bd_pins eth_pcs_pma_0_1/tx_dly_rdy] [get_bd_pins eth_pcs_pma_shared/tx_dly_rdy_0]
+connect_bd_net [get_bd_pins eth_pcs_pma_0_1/rx_dly_rdy] [get_bd_pins eth_pcs_pma_shared/rx_dly_rdy_0]
+connect_bd_net [get_bd_pins eth_pcs_pma_0_1/tx_vtc_rdy] [get_bd_pins eth_pcs_pma_shared/tx_vtc_rdy_0]
+connect_bd_net [get_bd_pins eth_pcs_pma_0_1/rx_vtc_rdy] [get_bd_pins eth_pcs_pma_shared/rx_vtc_rdy_0]
+connect_bd_net [get_bd_pins eth_pcs_pma_0_1/tx_dly_rdy] [get_bd_pins eth_pcs_pma_shared/tx_dly_rdy_2]
+connect_bd_net [get_bd_pins eth_pcs_pma_0_1/rx_dly_rdy] [get_bd_pins eth_pcs_pma_shared/rx_dly_rdy_2]
+connect_bd_net [get_bd_pins eth_pcs_pma_0_1/tx_vtc_rdy] [get_bd_pins eth_pcs_pma_shared/tx_vtc_rdy_2]
+connect_bd_net [get_bd_pins eth_pcs_pma_0_1/rx_vtc_rdy] [get_bd_pins eth_pcs_pma_shared/rx_vtc_rdy_2]
+connect_bd_net [get_bd_pins eth_pcs_pma_0_1/tx_dly_rdy] [get_bd_pins eth_pcs_pma_shared/tx_dly_rdy_3]
+connect_bd_net [get_bd_pins eth_pcs_pma_0_1/rx_dly_rdy] [get_bd_pins eth_pcs_pma_shared/rx_dly_rdy_3]
+connect_bd_net [get_bd_pins eth_pcs_pma_0_1/tx_vtc_rdy] [get_bd_pins eth_pcs_pma_shared/tx_vtc_rdy_3]
+connect_bd_net [get_bd_pins eth_pcs_pma_0_1/rx_vtc_rdy] [get_bd_pins eth_pcs_pma_shared/rx_vtc_rdy_3]
+
 # Clocks
 connect_bd_net [get_bd_pins zynq_ultra_ps_e_0/pl_clk0] [get_bd_pins axi_ethernet_0/axis_clk]
 connect_bd_net [get_bd_pins zynq_ultra_ps_e_0/pl_clk0] [get_bd_pins axi_ethernet_1/axis_clk]
@@ -242,7 +255,39 @@ create_bd_port -dir I ls_mezz_int1
 create_bd_port -dir I ref_clk_10mhz
 create_bd_port -dir I ref_clk_12mhz
 
+create_bd_port -dir O sfp_port_2_tx_txp
+create_bd_port -dir O sfp_port_2_tx_txn
+create_bd_port -dir O sfp_port_3_tx_txp
+create_bd_port -dir O sfp_port_3_tx_txn
+create_bd_port -dir O sfp_port_4_txp
+create_bd_port -dir O sfp_port_4_txn
+create_bd_port -dir O sfp_port_5_tx_txp
+create_bd_port -dir O sfp_port_5_tx_txn
 
+create_bd_cell -type ip -vlnv xilinx.com:ip:util_ds_buf:2.1 util_ds_buf_sfp_tx_2
+create_bd_cell -type ip -vlnv xilinx.com:ip:util_ds_buf:2.1 util_ds_buf_sfp_tx_3
+create_bd_cell -type ip -vlnv xilinx.com:ip:util_ds_buf:2.1 util_ds_buf_sfp_tx_4
+create_bd_cell -type ip -vlnv xilinx.com:ip:util_ds_buf:2.1 util_ds_buf_sfp_tx_5
+
+set_property -dict [list CONFIG.C_BUF_TYPE {OBUFDS}] [get_bd_cells util_ds_buf_sfp_tx_2]
+connect_bd_net [get_bd_ports sfp_port_2_tx_txp] [get_bd_pins util_ds_buf_sfp_tx_2/OBUF_DS_P]
+connect_bd_net [get_bd_ports sfp_port_2_tx_txn] [get_bd_pins util_ds_buf_sfp_tx_2/OBUF_DS_N]
+connect_bd_net [get_bd_pins eth_pcs_pma_0_1/gmii_rx_dv_0] [get_bd_pins util_ds_buf_sfp_tx_2/OBUF_IN]
+
+set_property -dict [list CONFIG.C_BUF_TYPE {OBUFDS}] [get_bd_cells util_ds_buf_sfp_tx_3]
+connect_bd_net [get_bd_ports sfp_port_3_tx_txp] [get_bd_pins util_ds_buf_sfp_tx_3/OBUF_DS_P]
+connect_bd_net [get_bd_ports sfp_port_3_tx_txn] [get_bd_pins util_ds_buf_sfp_tx_3/OBUF_DS_N]
+connect_bd_net [get_bd_pins eth_pcs_pma_0_1/gmii_rx_dv_1] [get_bd_pins util_ds_buf_sfp_tx_3/OBUF_IN]
+
+set_property -dict [list CONFIG.C_BUF_TYPE {OBUFDS}] [get_bd_cells util_ds_buf_sfp_tx_4]
+connect_bd_net [get_bd_ports sfp_port_4_txp] [get_bd_pins util_ds_buf_sfp_tx_4/OBUF_DS_P]
+connect_bd_net [get_bd_ports sfp_port_4_txn] [get_bd_pins util_ds_buf_sfp_tx_4/OBUF_DS_N]
+connect_bd_net [get_bd_pins gmii_mux_0/gmii_out_tx_en] [get_bd_pins util_ds_buf_sfp_tx_4/OBUF_IN]
+
+set_property -dict [list CONFIG.C_BUF_TYPE {OBUFDS}] [get_bd_cells util_ds_buf_sfp_tx_5]
+connect_bd_net [get_bd_ports sfp_port_5_tx_txp] [get_bd_pins util_ds_buf_sfp_tx_5/OBUF_DS_P]
+connect_bd_net [get_bd_ports sfp_port_5_tx_txn] [get_bd_pins util_ds_buf_sfp_tx_5/OBUF_DS_N]
+connect_bd_net [get_bd_pins gmii_mux_1/gmii_out_tx_en] [get_bd_pins util_ds_buf_sfp_tx_5/OBUF_IN]
 
 # PS GP0 and HP0 port clocks
 connect_bd_net [get_bd_pins zynq_ultra_ps_e_0/pl_clk0] [get_bd_pins zynq_ultra_ps_e_0/maxihpm0_fpd_aclk]
@@ -625,12 +670,18 @@ connect_bd_net [get_bd_pins axi_gpio_0_slice_1_1/dout] [get_bd_pins clk_wiz_0/cl
 connect_bd_net [get_bd_pins axi_gpio_0_slice_2_2/dout] [get_bd_pins clk_wiz_1/clk_in_sel]
 
 # Debug clk_wiz_1 with rtclock_1
+create_bd_cell -type ip -vlnv xilinx.com:ip:proc_sys_reset:5.0 proc_sys_reset_1
+connect_bd_net [get_bd_pins proc_sys_reset_1/slowest_sync_clk] [get_bd_pins clk_wiz_1/clk_out1]
+connect_bd_net [get_bd_pins proc_sys_reset_1/ext_reset_in] [get_bd_pins zynq_ultra_ps_e_0/pl_resetn0]
+
+
 create_bd_cell -type ip -vlnv lightside-instruments.com:ip:rtclock:1.0 rtclock_1
 apply_bd_automation -rule xilinx.com:bd_rule:axi4 -config { Clk_master {/zynq_ultra_ps_e_0/pl_clk0 (99 MHz)} Clk_slave {/zynq_ultra_ps_e_0/pl_clk0 (99 MHz)} Clk_xbar {/zynq_ultra_ps_e_0/pl_clk0 (99 MHz)} Master {/zynq_ultra_ps_e_0/M_AXI_HPM0_FPD} Slave {/rtclock_1/S_AXI} intc_ip {New AXI Interconnect} master_apm {0}}  [get_bd_intf_pins rtclock_1/S_AXI]
 connect_bd_net [get_bd_pins clk_wiz_1/clk_out1] [get_bd_pins rtclock_1/clk]
 connect_bd_net [get_bd_ports ls_mezz_int0] [get_bd_pins rtclock_1/pps]
 connect_bd_net [get_bd_ports ls_mezz_int1] [get_bd_pins rtclock_1/pps2]
-connect_bd_net [get_bd_pins proc_sys_reset_0/interconnect_aresetn] [get_bd_pins rtclock_1/resetn]
+connect_bd_net [get_bd_pins proc_sys_reset_1/interconnect_aresetn] [get_bd_pins rtclock_1/resetn]
+
 
 connect_bd_net [get_bd_pins eth_pcs_pma_shared/clk125_out] [get_bd_pins traffic_analyzer_gmii_0/clk]
 connect_bd_net [get_bd_pins eth_pcs_pma_shared/clk125_out] [get_bd_pins rtclock_0/clk]

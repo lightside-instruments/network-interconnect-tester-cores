@@ -1,3 +1,11 @@
+network-interconnect-tester-cores (0.54-si-forum-2) bionic; urgency=medium
+
+  * Fixed bug with unconnected eth-pcs-pma signals from removed instances
+  * Connected gmii enable signals to idle sfp ports 2-5 - rx0 rx1 tx0 tx1 
+  * Fixed simulation testbench AXI write to be single 32 bit instead of 128 bit
+
+ -- Vladimir Vassilev <vladimir@lightside-instruments.com>  Sat, 31 Oct 2025 15:10:43 +0100
+
 network-interconnect-tester-cores (0.54-si-forum-1) bionic; urgency=medium
 
   * Only eth0 and eth1 interfaces
