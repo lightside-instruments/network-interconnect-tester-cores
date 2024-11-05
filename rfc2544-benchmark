@@ -24,6 +24,13 @@ conns=None
 yconns=None
 frame_data=None
 
+def mysleep(delay):
+	global args
+	if(args.simulation):
+		os.system("sim-run %d"%(delay*10000))
+	else:
+		time.sleep(delay)
+
 def get_delta_counter(before,after,node_name,inst_id_xpath):
 	return int(after.xpath("node[node-id='"+node_name+"']/data/"+inst_id_xpath)[0].text) - int(before.xpath("node[node-id='"+node_name+"']/data/"+inst_id_xpath)[0].text)
 
@@ -134,7 +141,7 @@ def trial(network, conns, yconns, test_time=60, frame_size=1500, interframe_gap=
 	tntapi.network_commit(conns)
 
 	print("Waiting " + str(test_time) + " sec. ..." )
-	time.sleep(test_time+1)
+	mysleep(test_time+1)
 
 	print("Stopping generators ...")
 	ok=yangcli(yconns[src_node],"""delete /interfaces/interface[name='%(name)s']/traffic-generator"""%{'name':src_node_interface}).xpath('./ok')
@@ -142,7 +149,7 @@ def trial(network, conns, yconns, test_time=60, frame_size=1500, interframe_gap=
 
 	tntapi.network_commit(conns)
 	print("Done.")
-	time.sleep(2)
+	mysleep(2)
 
 	state_after = tntapi.network_get_state(network, conns, filter=filter)
 
@@ -352,13 +359,131 @@ def test_back_to_back_frames():
 def test_system_recovery():
 	print("#TODO")
 
-def test_reset():
-	print("#TODO")
+def power_up():
+	print("#power up")
+def power_down():
+	print("#power down")
+
+
+def test_reset(throughput_pps_max):
+	global args
+	global network
+	global conns
+	global yconns
+	global frame_data
+
+	filter ="" #"""<filter type="xpath" select="/*[local-name()='interfaces-state' or local-name()='interfaces']/interface/*[local-name()='traffic-analyzer' or local-name()='oper-status' or local-name()='statistics' or local-name()='speed']"/>"""
+
+	test_time=int(args.trial_time)
+
+	interframe_gap=int(args.interframe_gap_min)
+	interburst_gap=0
+	frames_per_burst=0
+	src_node=args.src_node
+	src_node_interface=args.src_node_interface
+	dst_node=args.dst_node
+	dst_node_interface=args.dst_node_interface
+	src_mac_address=args.src_mac_address
+	dst_mac_address=args.dst_mac_address
+	testframe_type=args.testframe_type
+	speed=int(args.speed)
+	frame_size = int(args.frame_size)
+
+	interframe_gap = (speed/8 - frame_size*(throughput_pps_max))/(throughput_pps_max)
+	interframe_gap = math.ceil(interframe_gap)
+
+
+	config_idle={}
+	print(dst_node)
+	result=yangcli(yconns[dst_node],"""replace /interfaces/interface[name='%(name)s'] -- type=ethernetCsmacd"""%{'name':dst_node_interface})
+	ok = result.xpath('./ok')
+	assert(len(ok)==1)
+	ok=yangcli(yconns[src_node],"""replace /interfaces/interface[name='%(name)s'] -- type=ethernetCsmacd"""%{'name':src_node_interface}).xpath('./ok')
+	assert(len(ok)==1)
+
+	tntapi.network_commit(conns)
+
+	ok=yangcli(yconns[dst_node],"""create /interfaces/interface[name='%(name)s']/traffic-analyzer"""%{'name':dst_node_interface}).xpath('./ok')
+	assert(len(ok)==1)
+
+	tntapi.network_commit(conns)
+
+	my_burst_config=""
+
+	generator_direction_suffix=''
+	analyzer_direction_suffix=''
+
+	if(frames_per_burst == 0):
+		total_frames = int(math.floor(test_time*speed/((interframe_gap+frame_size)*8)))
+	else:
+		total_frames = int(math.floor(frames_per_burst*test_time*speed/(((frames_per_burst-1)*interframe_gap+frames_per_burst*frame_size+interburst_gap)*8)))
+
+	testframe = ""
+	if(testframe_type != []):
+		testframe = "testframe-type=%s" % testframe_type
+	print("""create /interfaces/interface[name="%(name)s"]/traffic-generator -- frame-size=%(frame-size)d interframe-gap=%(interframe-gap)d total-frames=%(total-frames)s frame-data=%(frame-data)s %(testframe)s""" % {'name':src_node_interface,'frame-size':frame_size, 'interframe-gap':interframe_gap, 'total-frames':total_frames, 'frame-data':frame_data, 'testframe':testframe})
+	ok=yangcli(yconns[src_node],"""create /interfaces/interface[name="%(name)s"]/traffic-generator -- frame-size=%(frame-size)d interframe-gap=%(interframe-gap)d total-frames=%(total-frames)s frame-data=%(frame-data)s %(testframe)s""" % {'name':src_node_interface,'frame-size':frame_size, 'interframe-gap':interframe_gap, 'total-frames':total_frames, 'frame-data':frame_data, 'testframe':testframe}).xpath('./ok')
+	assert(len(ok)==1)
+
+	tntapi.network_commit(conns)
+
+	print("Waiting 1 sec. ...")
+	mysleep(1)
+
+	print("Power down.")
+	power_down()
+
+	print("Waiting 5 sec. ..." )
+	mysleep(5)
+
+	# validate no packets are dropped
+	# read last timestamp
+        #
+
+	print("Waiting 5 sec. ..." )
+	mysleep(5)
+
+	state_before = tntapi.network_get_state(network, conns, filter=filter)
+
+	print("Power up.")
+	power_up()
+
+	print("Waiting 10 sec. ..." )
+	mysleep(10)
+
+	state_after = tntapi.network_get_state(network, conns, filter=filter)
+
+
+	print("Stopping generators ...")
+	ok=yangcli(yconns[src_node],"""delete /interfaces/interface[name='%(name)s']/traffic-generator"""%{'name':src_node_interface}).xpath('./ok')
+	assert(len(ok)==1)
+
+	tntapi.network_commit(conns)
+	print("Done.")
+	mysleep(2)
+
+	state_after = tntapi.network_get_state(network, conns, filter=filter)
+
+
+	tntapi.print_state_ietf_interfaces_statistics_delta(network, state_before, state_after)
+
+	(rx_in_pkts, rx_testframe_pkts, generated_pkts, sequence_errors, latency_min, latency_max, latency_average)=get_traffic_stats(dst_node, dst_node_interface, src_node, src_node_interface, state_before, state_after, delta, test_time, frame_size, interframe_gap, frames_per_burst, interburst_gap, total_frames)
+
+	print("Disabling analyzer.")
+	ok=yangcli(yconns[dst_node],"""delete /interfaces/interface[name='%(name)s']/traffic-analyzer%(analyzer-direction-suffix)s"""%{'name':dst_node_interface, 'analyzer-direction-suffix':analyzer_direction_suffix}).xpath('./ok')
+	assert(len(ok)==1)
+
+	tntapi.network_commit(conns)
+
+	return 	(rx_in_pkts, rx_testframe_pkts, generated_pkts, sequence_errors, latency_min, latency_max, latency_average)
+
 
 def main():
 	pass
 
 if __name__ == "__main__":
+
+	global args
 
 	parser = argparse.ArgumentParser()
 	parser.add_argument("--config", help="Path to the netconf configuration *.xml file defining the configuration according to ietf-networks, ietf-networks-topology and netconf-node models e.g. ../networks.xml")
@@ -378,6 +503,7 @@ if __name__ == "__main__":
 	parser.add_argument('--speed', default="1000000000",help="Maximum interface speed in bits per second e.g 1000000000 for 1Gb Ethernet interface.")
 	parser.add_argument('--trial-time', default="2",help="Time each trial takes in seconds.")
 	parser.add_argument('--testframe-type', default="dynamic",help="Type of generated testframe e.g. static or dynamic")
+	parser.add_argument('--simulation', action='store_true',help="Enables call of sim-run instead of delay")
 
 	args = parser.parse_args()
 
@@ -395,15 +521,16 @@ if __name__ == "__main__":
 
 	print("#===Throughput===")
 	throughput_pps = test_throughput()
-	print("#===Latency===")
-	test_latency(throughput_pps)
-	print("#===Frame loss rate===")
-	test_frame_loss_rate()
-	print("#===Back to back frames===")
-	test_back_to_back_frames()
-	print("#===System recovery===")
-	test_system_recovery()
-	print("#===Reset===")
-	test_reset()
+	#print("#===Latency===")
+	#test_latency(throughput_pps)
+	#print("#===Frame loss rate===")
+	#test_frame_loss_rate()
+	#print("#===Back to back frames===")
+	#test_back_to_back_frames()
+	#print("#===System recovery===")
+	#test_system_recovery()
+	#print("#===Reset===")
+	#throughput_pps = 1000
+	#test_reset(throughput_pps)
 
 	sys.exit(0)

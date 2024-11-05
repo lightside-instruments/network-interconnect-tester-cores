@@ -1,3 +1,10 @@
+rfc2544-benchmark (1.11) jammy; urgency=medium
+
+  * Added --simulation parameter calling os.system("sim-run 1*10000") instead of time.sleep(1)
+  * Added partial implementation of the rfc2544 reset benchmark
+
+ -- Vladimir Vassilev <vladimir@lightside-instruments.com>  Tue, 05 Nov 2024 18:06:16 +0100
+
 rfc2544-benchmark (1.10) jammy; urgency=medium
 
   * Fixes bug in the bugfix in 1.9
