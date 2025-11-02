@@ -89,6 +89,7 @@
     };
 };
 
+/*
 &axi_ethernet_5 {
     local-mac-address = [70 b3 d5 ec 20 05];
     phy-handle = <&phy5>;
@@ -109,3 +110,5 @@
         };
     };
 };
+*/
+

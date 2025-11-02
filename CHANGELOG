@@ -1,3 +1,9 @@
+network-interconnect-tester-cores (0.55) bionic; urgency=medium
+
+  * Removed eth_pcs_pma trancievers so that sfp2 and sfp3 output tx_gmii_en for sfp0 and sfp1. sfp5 outputs 125MHz clock  
+
+ -- Vladimir Vassilev <vladimir@lightside-instruments.com>  Sun, 02 Nov 2025 16:39:59 +0100
+
 network-interconnect-tester-cores (0.54) stable; urgency=medium
 
   * Added filter_gmii test core for emulating simple DUT

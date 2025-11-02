@@ -4,13 +4,13 @@ module tb();
   localparam HALF_CLK_PERIOD = 0.8;
 
   // Should be updated according to the generated address map
-  localparam [31:0] gmii_mux_0_address = 32'hA0200000;
-  localparam [31:0] gmii_mux_1_address = 32'hA0210000;
-  localparam [31:0] gmii_mux_6_address = 32'hA0260000;
+  localparam [31:0] gmii_mux_0_address = 32'hA00F0000;
+  localparam [31:0] gmii_mux_1_address = 32'hA0100000;
+  localparam [31:0] gmii_mux_6_address = 32'hA0150000;
   localparam [31:0] axi_ethernet_0_address = 32'hA0000000;
-  localparam [31:0] tri_mode_ethernet_mac_2_address = 32'hA01E0000;
-  localparam [31:0] traffic_generator_gmii_0_address = 32'hA0280000;
-  localparam [31:0] traffic_analyzer_gmii_0_address = 32'hA0290000;
+  localparam [31:0] traffic_generator_gmii_0_address = 32'hA0160000;
+  localparam [31:0] traffic_generator_gmii_1_address = 32'hA0170000;
+  localparam [31:0] traffic_analyzer_gmii_0_address = 32'hA0180000;
   reg aclk =1'b0;
   reg arstn = 1'b0;
 
@@ -47,6 +47,24 @@ module tb();
         .sfp_port_1_txn(sfp_port_1_txn),
         .sfp_port_1_txp(sfp_port_1_txp));
 
+task axi_write;
+    input [31:0] addr;
+    input [31:0] data;
+    begin
+        tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_burst_strb(addr,0,2,0,0,0,0,data,1,16'h000F,4,resp);
+    end
+endtask
+
+task axi_read;
+    input [31:0] addr;
+    output reg [31:0] data;
+    reg resp;
+    begin
+        tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(addr, 8'd4, data, resp);
+    end
+endtask
+
+
  // rеsеt
  initial begin
     arstn = 1'b0;
@@ -79,109 +97,113 @@ module tb();
 
     #1000 ;
 
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(traffic_analyzer_gmii_0_address+32'h28, 4, read_data_64[63:32], resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(traffic_analyzer_gmii_0_address+32'h2C, 4, read_data_64[31:0], resp);
+    axi_read(traffic_analyzer_gmii_0_address+32'h28, read_data_64[63:32]);
+    axi_read(traffic_analyzer_gmii_0_address+32'h2C, read_data_64[31:0]);
     $display("traffic_analyzer_gmii OCTETS reg (%x)", read_data_64);
 
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(traffic_analyzer_gmii_0_address+32'h58, 4, read_data_64[63:32], resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(traffic_analyzer_gmii_0_address+32'h5C, 4, read_data_64[31:0], resp);
+    axi_read(traffic_analyzer_gmii_0_address+32'h58, read_data_64[63:32]);
+    axi_read(traffic_analyzer_gmii_0_address+32'h5C, read_data_64[31:0]);
     $display("traffic_analyzer_gmii BAD_CRC_PKTS reg (%x)", read_data_64);
 
 
     /* enable port0 traffic generator */
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(gmii_mux_0_address, 4, read_data, resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(gmii_mux_0_address+8, 4, 32'h00000003, resp);
+    axi_read(gmii_mux_0_address, read_data);
+    axi_write(gmii_mux_0_address+8, 32'h00000003);
 
     /* enable port1 traffic generator */
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(gmii_mux_1_address, 4, read_data, resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(gmii_mux_1_address+8, 4, 32'h00000003, resp);
+    axi_read(gmii_mux_1_address, read_data);
+    axi_write(gmii_mux_1_address+8, 32'h00000003);
 
     /* enable port1 traffic analyzer */
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(gmii_mux_6_address, 4, read_data, resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(gmii_mux_6_address+8, 4, 32'h00000001, resp);
+    axi_read(gmii_mux_6_address, read_data);
+    axi_write(gmii_mux_6_address+8, 32'h00000000);
 
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(gmii_mux_0_address+32'h00, 4, read_data, resp);
+    axi_read(gmii_mux_0_address+32'h00, read_data);
     $display("gmii_mux IP id (%x)", read_data);
 
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(traffic_generator_gmii_0_address+32'h00, 4, read_data, resp);
+    axi_read(traffic_generator_gmii_1_address+32'h00, read_data);
     $display("traffic_generator_gmii IP id (%x)", read_data);
 
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(traffic_generator_gmii_0_address+32'h0C, 4, 32'h12345678, resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(traffic_generator_gmii_0_address+32'h0C, 4, read_data, resp);
+    axi_write(traffic_generator_gmii_1_address+32'h0C, 32'h12345678);
+    axi_read(traffic_generator_gmii_1_address+32'h0C, read_data);
     $display("traffic_generator_gmii FLIP reg (%x)", read_data);
 
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(traffic_analyzer_gmii_0_address+32'h0C, 4, 32'h12345678, resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(traffic_analyzer_gmii_0_address+32'h0C, 4, read_data, resp);
+    axi_write(traffic_analyzer_gmii_0_address+32'h0C, 32'h12345678);
+    axi_read(traffic_analyzer_gmii_0_address+32'h0C, read_data);
     $display("traffic_analyzer_gmii FLIP reg (%x)", read_data);
 
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(traffic_generator_gmii_0_address+32'h14, 4, 32'h0000000C, resp); /* interframe gap */
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(traffic_generator_gmii_0_address+32'h44, 4, 32'd50, resp); /* layer 1 frame size -seqnum(8) - timestamp(10) - crc(4) */
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(traffic_generator_gmii_0_address+32'h50, 4, 32'h55555555, resp); /* frame data */
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(traffic_generator_gmii_0_address+32'h50, 4, 32'h555555d5, resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(traffic_generator_gmii_0_address+32'h50, 4, 32'h01020304, resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(traffic_generator_gmii_0_address+32'h50, 4, 32'h05060708, resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(traffic_generator_gmii_0_address+32'h50, 4, 32'h090a0b0c, resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(traffic_generator_gmii_0_address+32'h50, 4, 32'h0d0e0f10, resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(traffic_generator_gmii_0_address+32'h50, 4, 32'h11121314, resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(traffic_generator_gmii_0_address+32'h50, 4, 32'h15161718, resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(traffic_generator_gmii_0_address+32'h50, 4, 32'h191a1b1c, resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(traffic_generator_gmii_0_address+32'h50, 4, 32'h1d1e1f20, resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(traffic_generator_gmii_0_address+32'h50, 4, 32'h21222324, resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(traffic_generator_gmii_0_address+32'h50, 4, 32'h00072728, resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(traffic_generator_gmii_0_address+32'h50, 4, 32'h292a2b2c, resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(traffic_generator_gmii_0_address+32'h50, 4, 32'h2d2e2f30, resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(traffic_generator_gmii_0_address+32'h50, 4, 32'h31323334, resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(traffic_generator_gmii_0_address+32'h50, 4, 32'h35363738, resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(traffic_generator_gmii_0_address+32'h50, 4, 32'h393a3b3c, resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(traffic_generator_gmii_0_address+32'h50, 4, 32'h344ca062, resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(traffic_generator_gmii_0_address+32'h14, 4, 32'h0000000C, resp); /* interframe gap */
+    axi_write(traffic_generator_gmii_1_address+32'h14, 32'h0000000C); /* interframe gap */
+    axi_write(traffic_generator_gmii_1_address+32'h44, 32'd50); /* layer 1 frame size -seqnum(8) - timestamp(10) - crc(4) */
+    axi_write(traffic_generator_gmii_1_address+32'h50, 32'h55555555);
+    axi_write(traffic_generator_gmii_1_address+32'h50, 32'h555555d5);
+    axi_write(traffic_generator_gmii_1_address+32'h50, 32'h01020304);
+    axi_write(traffic_generator_gmii_1_address+32'h50, 32'h05060708);
+    axi_write(traffic_generator_gmii_1_address+32'h50, 32'h090a0b0c);
+    axi_write(traffic_generator_gmii_1_address+32'h50, 32'h0d0e0f10);
+    axi_write(traffic_generator_gmii_1_address+32'h50, 32'h11121314);
+    axi_write(traffic_generator_gmii_1_address+32'h50, 32'h15161718);
+    axi_write(traffic_generator_gmii_1_address+32'h50, 32'h191a1b1c);
+    axi_write(traffic_generator_gmii_1_address+32'h50, 32'h1d1e1f20);
+    axi_write(traffic_generator_gmii_1_address+32'h50, 32'h21222324);
+    axi_write(traffic_generator_gmii_1_address+32'h50, 32'h25262728);
+    axi_write(traffic_generator_gmii_1_address+32'h50, 32'h292a2b2c);
+    axi_write(traffic_generator_gmii_1_address+32'h50, 32'h2d2e2f30);
+    axi_write(traffic_generator_gmii_1_address+32'h50, 32'h31323334);
+    axi_write(traffic_generator_gmii_1_address+32'h50, 32'h35363738);
+    axi_write(traffic_generator_gmii_1_address+32'h50, 32'h393a3b3c);
+    axi_write(traffic_generator_gmii_1_address+32'h50, 32'h344ca062);
+    axi_write(traffic_generator_gmii_1_address+32'h14, 32'h0000000C); /* interframe gap */
 
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(traffic_analyzer_gmii_0_address+16, 4, 32'h00000001, resp); /* set the enable bit reg control[0] */
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(traffic_generator_gmii_0_address+16, 4, 32'h00000003, resp); /* set the enable bit reg control[0] and dynamic mode control[1]*/
+    axi_write( traffic_analyzer_gmii_0_address+16, 32'h00000001); /* set the enable bit reg control[0] */
+    axi_write(traffic_generator_gmii_1_address+16, 32'h00000003); /* set the enable bit reg control[0] and dynamic mode control[1]*/
 
     #50000 ;
 
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(traffic_generator_gmii_0_address+16, 4, 32'h00000000, resp); /* clear the enable bit reg control[0] */
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(traffic_analyzer_gmii_0_address+16, 4, 32'h00000003, resp); /* set the freeze bit reg control[1] */
+    axi_write(traffic_generator_gmii_1_address+16, 32'h00000000); /* clear the enable bit reg control[0] */
+    axi_write(traffic_analyzer_gmii_0_address+16, 32'h00000003); /* set the freeze bit reg control[1] */
     #5000
 
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(traffic_generator_gmii_0_address+32'h0C, 4, 32'h12345678, resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(traffic_generator_gmii_0_address+32'h0C, 4, read_data, resp);
+    axi_write(traffic_generator_gmii_1_address+32'h0C, 32'h12345678);
+    axi_read(traffic_generator_gmii_1_address+32'h0C, read_data);
     $display("traffic_generator_gmii FLIP reg (%x)", read_data);
 
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.write_data(traffic_analyzer_gmii_0_address+32'h0C, 4, 32'h12345678, resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(traffic_analyzer_gmii_0_address+32'h0C, 4, read_data, resp);
+    axi_write(traffic_analyzer_gmii_0_address+32'h0C, 32'h12345678);
+    axi_read(traffic_analyzer_gmii_0_address+32'h0C, read_data);
     $display("traffic_analyzer_gmii FLIP reg (%x)", read_data);
 
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(traffic_analyzer_gmii_0_address+32'h28, 4, read_data_64[63:32], resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(traffic_analyzer_gmii_0_address+32'h2C, 4, read_data_64[31:0], resp);
+    axi_read(traffic_analyzer_gmii_0_address+32'h28, read_data_64[63:32]);
+    axi_read(traffic_analyzer_gmii_0_address+32'h2C, read_data_64[31:0]);
     $display("traffic_analyzer_gmii OCTETS reg (%x)", read_data_64);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(traffic_analyzer_gmii_0_address+32'h30, 4, read_data_64[63:32], resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(traffic_analyzer_gmii_0_address+32'h34, 4, read_data_64[31:0], resp);
+    axi_read(traffic_analyzer_gmii_0_address+32'h30, read_data_64[63:32]);
+    axi_read(traffic_analyzer_gmii_0_address+32'h34, read_data_64[31:0]);
     $display("traffic_analyzer_gmii OCTETS_IDLE reg (%x)", read_data_64);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(traffic_analyzer_gmii_0_address+32'h20, 4, read_data_64[63:32], resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(traffic_analyzer_gmii_0_address+32'h24, 4, read_data_64[31:0], resp);
+    axi_read(traffic_analyzer_gmii_0_address+32'h20, read_data_64[63:32]);
+    axi_read(traffic_analyzer_gmii_0_address+32'h24, read_data_64[31:0]);
     $display("traffic_analyzer_gmii PKTS reg (%x)", read_data_64);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(traffic_analyzer_gmii_0_address+32'h58, 4, read_data_64[63:32], resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(traffic_analyzer_gmii_0_address+32'h5C, 4, read_data_64[31:0], resp);
+    axi_read(traffic_analyzer_gmii_0_address+32'h58, read_data_64[63:32]);
+    axi_read(traffic_analyzer_gmii_0_address+32'h5C, read_data_64[31:0]);
     $display("traffic_analyzer_gmii BAD_CRC_PKTS reg (%x)", read_data_64);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(traffic_analyzer_gmii_0_address+32'h60, 4, read_data_64[63:32], resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(traffic_analyzer_gmii_0_address+32'h64, 4, read_data_64[31:0], resp);
+    axi_read(traffic_analyzer_gmii_0_address+32'h60, read_data_64[63:32]);
+    axi_read(traffic_analyzer_gmii_0_address+32'h64, read_data_64[31:0]);
     $display("traffic_analyzer_gmii BAD_CRC_OCTETS reg (%x)", read_data_64);
 
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(traffic_analyzer_gmii_0_address+32'h98, 4, read_data, resp);
+    axi_read(traffic_analyzer_gmii_0_address+32'h98, read_data);
     $display("traffic_analyzer_gmii LATENCY_MIN_NSEC reg (%u)", read_data);
 
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(traffic_analyzer_gmii_0_address+32'hA8, 4, read_data, resp);
+    axi_read(traffic_analyzer_gmii_0_address+32'hA8, read_data);
     $display("traffic_analyzer_gmii LATENCY_MAX_NSEC reg (%u)", read_data);
 
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(traffic_analyzer_gmii_0_address+32'hB8, 4, read_data, resp);
+    axi_read(traffic_analyzer_gmii_0_address+32'hB8, read_data);
     $display("traffic_analyzer_gmii LATENCY_NSEC reg (%u)", read_data);
 
 
+    axi_read(traffic_analyzer_gmii_0_address+32'h20, read_data_64[63:32]);
+    axi_read(traffic_analyzer_gmii_0_address+32'h24, read_data_64[31:0]);
+    $display("traffic_analyzer_gmii PKTS reg (%x)", read_data_64);
+
     // Read RX Good Frames counter pg051
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(axi_ethernet_0_address+32'h00000290, 4, read_data_64[31:0], resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(axi_ethernet_0_address+32'h00000294, 4, read_data_64[63:32], resp);
+    axi_read(axi_ethernet_0_address+32'h00000290, read_data_64[31:0]);
+    axi_read(axi_ethernet_0_address+32'h00000294, read_data_64[63:32]);
     $display("Read RX Good Frames counter pg051 reg (%x)", read_data_64);
 
     if(read_data_64 < 2) begin
@@ -191,26 +213,25 @@ module tb();
     #5000
 
    // Read RX Good Frames counter pg051
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(axi_ethernet_0_address+32'h00000290, 4, read_data_again_64[31:0], resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(axi_ethernet_0_address+32'h00000294, 4, read_data_again_64[63:32], resp);
+    axi_read(axi_ethernet_0_address+32'h00000290, read_data_again_64[31:0]);
+    axi_read(axi_ethernet_0_address+32'h00000294, read_data_again_64[63:32]);
 
      if(read_data_again_64 != read_data_64) begin
       $error("No new frames expected");
      end
 
     // Read TX Good Frames counter pg051
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(axi_ethernet_0_address+32'h000002D8, 4, read_data_64[31:0], resp);
-    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(axi_ethernet_0_address+32'h000002DC, 4, read_data_64[63:32], resp);
+    axi_read(axi_ethernet_0_address+32'h000002D8, read_data_64[31:0]);
+    axi_read(axi_ethernet_0_address+32'h000002DC, read_data_64[63:32]);
 
     // Read TX Good Frames counter pg051
-//    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(tri_mode_ethernet_mac_2_address+32'h000002d8, 4, read_data_64[31:0], resp);
-//    tb.spark_wrapper_i.spark_i.zynq_ultra_ps_e_0.inst.read_data(tri_mode_ethernet_mac_2_address+32'h000002dc, 4, read_data_64[63:32], resp);
+//    axi_read(tri_mode_ethernet_mac_2_address+32'h000002d8, read_data_64[31:0]);
+//    axi_read(tri_mode_ethernet_mac_2_address+32'h000002dc, read_data_64[63:32]);
 
 
     $finish;
 
- end
-
+end
 
 assign sfp_port_0_rxn = sfp_port_1_txn;
 assign sfp_port_0_rxp = sfp_port_1_txp;
@@ -218,4 +239,3 @@ assign sfp_port_1_rxn = sfp_port_0_txn;
 assign sfp_port_1_rxp = sfp_port_0_txp;
 
 endmodule
-

@@ -83,9 +83,10 @@ fi
     done
 
     # Off-line build - start
-#    sed -i "s/CONFIG_PRE_MIRROR_URL=.*/CONFIG_PRE_MIRROR_URL=\"\"/g" ./project-spec/configs/config
-#    echo 'DL_DIR = "/petalinux/downloads"' >> ./project-spec/meta-user/conf/petalinuxbsp.conf
-#    echo 'SSTATE_DIR = "/petalinux/sstate-cache"'  >> ./project-spec/meta-user/conf/petalinuxbsp.conf
+    # After complete build the sstate and downloads directories can be archived e.g. ~/petalinux/downloads for a fully offline build
+    sed -i "s/CONFIG_PRE_MIRROR_URL=.*/CONFIG_PRE_MIRROR_URL=\"\"/g" ./project-spec/configs/config
+    echo 'DL_DIR = "/petalinux/downloads"' >> ./project-spec/meta-user/conf/petalinuxbsp.conf
+    echo 'SSTATE_DIR = "/petalinux/sstate-cache"'  >> ./project-spec/meta-user/conf/petalinuxbsp.conf
     # Off-line build - end
 
     # Append mods to rootfs_config file
