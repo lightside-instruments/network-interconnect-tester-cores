@@ -589,7 +589,7 @@ create_bd_cell -type ip -vlnv xilinx.com:ip:util_ds_buf:2.1 util_ds_buf_sfp_tx_5
 set_property -dict [list CONFIG.C_BUF_TYPE {OBUFDS}] [get_bd_cells util_ds_buf_sfp_tx_2]
 connect_bd_net [get_bd_ports sfp_port_2_tx_txp] [get_bd_pins util_ds_buf_sfp_tx_2/OBUF_DS_P]
 connect_bd_net [get_bd_ports sfp_port_2_tx_txn] [get_bd_pins util_ds_buf_sfp_tx_2/OBUF_DS_N]
-connect_bd_net [get_bd_pins gmii_mux_0/gmii_out_tx_en] [get_bd_pins util_ds_buf_sfp_tx_2/OBUF_IN]
+connect_bd_net [get_bd_pins traffic_generator_gmii_1/cycle_start] [get_bd_pins util_ds_buf_sfp_tx_2/OBUF_IN]
 
 set_property -dict [list CONFIG.C_BUF_TYPE {OBUFDS}] [get_bd_cells util_ds_buf_sfp_tx_3]
 connect_bd_net [get_bd_ports sfp_port_3_tx_txp] [get_bd_pins util_ds_buf_sfp_tx_3/OBUF_DS_P]

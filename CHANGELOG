@@ -1,3 +1,9 @@
+network-interconnect-tester-cores (0.56) bionic; urgency=medium
+
+  * Added start_cycle output to traffic_generator_gmii indicating begining of burst
+  * Connected traffic_generator_gmii_1/cycle_start to sfp2 tx differential pair
+ -- Vladimir Vassilev <vladimir@lightside-instruments.com>  Wed, 10 Dec 2025 14:28:52 +0100
+
 network-interconnect-tester-cores (0.55) bionic; urgency=medium
 
   * Removed eth_pcs_pma trancievers so that sfp2 and sfp3 output tx_gmii_en for sfp0 and sfp1. sfp5 outputs 125MHz clock  

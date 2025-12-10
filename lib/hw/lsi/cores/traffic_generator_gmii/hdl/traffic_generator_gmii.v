@@ -23,6 +23,8 @@ module traffic_generator_gmii
     output reg gmii_en,
     output reg gmii_er,
 
+    output reg cycle_start,
+
     input [47:0] sec,
     input [29:0] nsec,
 
@@ -80,6 +82,7 @@ module traffic_generator_gmii
    reg      [7:0]     data_t0;
    reg      [63:0]    sequence_number;
    reg      [31:0]    burst_index;
+   reg                last_frame_in_cycle;
 
    integer     data;
 
@@ -178,6 +181,9 @@ always @(posedge clk) begin
           gmii_en <= 0;
           gmii_er <= 0;
 
+          cycle_start <= 0;
+          last_frame_in_cycle<=1;
+
           state <= 2'b00;
 	  gap_counter <= 0;
           burst_index <= 0;
@@ -210,11 +216,21 @@ always @(posedge clk) begin
                else if((burst_index+1) == frames_per_burst_reg) begin
                    burst_index <= 0;
                    gap_counter_last<=interburst_gap_reg-3;
+                   last_frame_in_cycle<=1;
                end
                else begin
                    burst_index <= burst_index + 1;
                    gap_counter_last<=interframe_gap_reg-3;
                end
+
+               if(last_frame_in_cycle) begin
+                   last_frame_in_cycle <= 0;
+                   cycle_start <= 1;
+               end
+               else begin
+                   cycle_start <= 0;
+               end
+
 
                seqnum_counter <= 0;
                timestamp_counter <= 0;
@@ -230,6 +246,7 @@ always @(posedge clk) begin
                state <= 0;
                frames <= 0;
                burst_index <= 0;
+               last_frame_in_cycle <= 0;
            end
           end
           1 : begin
