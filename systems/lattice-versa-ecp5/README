@@ -1,0 +1,23 @@
+==LiteX build instructions==
+
+./boards/targets/lattice_versa_ecp5.py --cpu-type vexriscv --cpu-variant linux --bus-standard axi-lite --log-filename log.txt --build --load
+
+or
+
+python3 -m boards.targets.lattice_versa_ecp5 --cpu-type vexriscv --cpu-variant linux --bus-standard axi-lite --log-filename log.txt --build --load
+
+
+==Register Map (CSR)==
+Check build/lattice_versa_ecp5/csr.csv
+
+==Instantiation of verilog cores==
+Example:
+ cd gateware/traffic_generator_gmii
+ python3 -m litex.tools.litex_read_verilog traffic_generator_gmii.v
+        # # #
+
+        self.specials += Instance("traffic_generator_gmii",
+            i_clk=self.clk,
+            i_resetn=self.resetn,
+            o_gmii_d=self.gmii_d,
+ ...
