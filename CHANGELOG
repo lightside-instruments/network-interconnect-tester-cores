@@ -1,3 +1,10 @@
+network-interconnect-tester-cores (0.59) noble; urgency=medium
+
+  * Changed autoneg SerDes Ethernet properties to false
+* liteX README updated to --toolchain peppercorn for gatemate
+
+ -- Vladimir Vassilev <vladimir@lightside-instruments.com>  Wed, 11 Feb 2026 23:11:03 +0100
+
 network-interconnect-tester-cores (0.58) noble; urgency=medium
 
   * Renamed target in ./systems from vendor specific to common litex and added some gatemate targets
