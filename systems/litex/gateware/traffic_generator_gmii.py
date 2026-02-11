@@ -39,7 +39,7 @@ class traffic_generator_gmii(LiteXModule):
         # assign fft wrapper ports to appropriate interfaces
         self.traffic_generator_gmii_params = dict()
         self.traffic_generator_gmii_params.update(
-            i_clk = ClockSignal("sys2x"),
+            i_clk = ClockSignal(),
             #i_resetn=self.resetn,
             #o_gmii_d=self.gmii_d,
             #o_gmii_en=self.gmii_en,
@@ -47,7 +47,7 @@ class traffic_generator_gmii(LiteXModule):
             #o_cycle_start=self.cycle_start,
             #i_sec=self.sec,
             #i_nsec=self.nsec,
-            i_S_AXI_ACLK=ClockSignal(self.mmap.clock_domain),
+            i_S_AXI_ACLK=ClockSignal(),
             #i_S_AXI_ARESETN=self.S_AXI_ARESETN,
             #i_S_AXI_AWADDR=self.S_AXI_AWADDR,
             #i_S_AXI_AWVALID=self.S_AXI_AWVALID,

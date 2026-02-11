@@ -1,3 +1,15 @@
+network-interconnect-tester-cores (0.58) noble; urgency=medium
+
+  * Renamed target in ./systems from vendor specific to common litex and added some gatemate targets
+
+ -- Vladimir Vassilev <vladimir@lightside-instruments.com>  Wed, 11 Feb 2026 13:34:15 +0100
+
+network-interconnect-tester-cores (0.57) noble; urgency=medium
+
+  * Initial system for LiteX ECP5 SoC with network tester cores
+
+ -- Vladimir Vassilev <vladimir@lightside-instruments.com>  Wed, 11 Feb 2026 01:10:31 +0100
+
 network-interconnect-tester-cores (0.56) bionic; urgency=medium
 
   * Added start_cycle output to traffic_generator_gmii indicating begining of burst

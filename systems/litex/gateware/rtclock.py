@@ -39,7 +39,7 @@ class rtclock(LiteXModule):
         # assign fft wrapper ports to appropriate interfaces
         self.rtclock_params = dict()
         self.rtclock_params.update(
-            i_clk = ClockSignal("sys2x"),)
+            i_clk = ClockSignal(),)
 
         self.specials += Instance(of="rtclock", **self.rtclock_params)
 
