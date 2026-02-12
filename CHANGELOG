@@ -1,3 +1,9 @@
+network-interconnect-tester-cores (0.60) noble ; urgency=medium
+
+  * Restored autoneg SerDes Ethernet properties to true only for eth4
+
+ -- Vladimir Vassilev <vladimir@lightside-instruments.com>  Thu, 12 Feb 2026 11:46:48 +0100
+
 network-interconnect-tester-cores (0.59) noble; urgency=medium
 
   * Changed autoneg SerDes Ethernet properties to false

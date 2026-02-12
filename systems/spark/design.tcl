@@ -89,7 +89,7 @@ CONFIG.InstantiateBitslice0 {true} \
 CONFIG.RxNibbleBitslice0Used {false} \
 CONFIG.ClockSelection {Async} \
 CONFIG.Ext_Management_Interface {true} \
-CONFIG.Auto_Negotiation {false}] [get_bd_cells eth_pcs_pma_3_4_5_rx_4_tx]
+CONFIG.Auto_Negotiation {true}] [get_bd_cells eth_pcs_pma_3_4_5_rx_4_tx]
 
 ## Port 2 (RX Only) configuration: Asynchronous, Auto-neg disabled
 #set_property -dict [list CONFIG.Standard {1000BASEX} \
