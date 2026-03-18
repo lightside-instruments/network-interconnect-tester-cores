@@ -1,4 +1,10 @@
-network-interconnect-tester-cores (0.60) noble ; urgency=medium
+network-interconnect-tester-cores (0.61) noble; urgency=medium
+
+  * Changed traffic generator frame data format specification from 12AB... to 12:ab...
+
+ -- Vladimir Vassilev <vladimir@lightside-instruments.com>  Wed, 18 Mar 2026 09:39:29 +0100
+
+network-interconnect-tester-cores (0.60) noble; urgency=medium
 
   * Restored autoneg SerDes Ethernet properties to true only for eth4
 
@@ -7,7 +13,7 @@ network-interconnect-tester-cores (0.60) noble ; urgency=medium
 network-interconnect-tester-cores (0.59) noble; urgency=medium
 
   * Changed autoneg SerDes Ethernet properties to false
-* liteX README updated to --toolchain peppercorn for gatemate
+  * liteX README updated to --toolchain peppercorn for gatemate
 
  -- Vladimir Vassilev <vladimir@lightside-instruments.com>  Wed, 11 Feb 2026 23:11:03 +0100
 

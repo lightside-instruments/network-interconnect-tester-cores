@@ -11,6 +11,8 @@
 #include "devmem-map.h"
 #include "ioreg.h"
 
+#include "yang-date-and-time.h"
+
 #define REG_ID_ADDR      0x00
 #define REG_VERSION_ADDR 0x04
 #define REG_FLIP_ADDR	 0x0C
