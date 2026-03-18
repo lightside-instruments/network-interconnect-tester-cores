@@ -10,13 +10,20 @@ $(PWD)/../../lib/hw/lsi/cores/filter_gmii/hdl/  \
 $(PWD)/../../lib/hw/lsi/common/hdl
 
 VERILOG_SOURCES += \
-$(PWD)/tester_loop.v \
 $(PWD)/../../lib/hw/lsi/cores/rtclock/hdl/rtclock.v \
+$(PWD)/../../lib/hw/lsi/cores/traffic_generator_gmii/hdl/traffic_generator_gmii_cpu_regs_defines.v \
+$(PWD)/../../lib/hw/lsi/cores/traffic_generator_gmii/hdl/traffic_generator_gmii_cpu_regs.v \
+$(PWD)/../../lib/hw/lsi/cores/common/hdl/ethernet_crc_8.v \
+$(PWD)/../../lib/hw/lsi/cores/traffic_analyzer_gmii/hdl/ethernet_crc_8_check.v \
 $(PWD)/../../lib/hw/lsi/cores/traffic_generator_gmii/hdl/traffic_generator_gmii.v \
+$(PWD)/../../lib/hw/lsi/cores/traffic_analyzer_gmii/hdl/traffic_analyzer_gmii_cpu_regs_defines.v \
+$(PWD)/../../lib/hw/lsi/cores/traffic_analyzer_gmii/hdl/traffic_analyzer_gmii_cpu_regs.v \
 $(PWD)/../../lib/hw/lsi/cores/traffic_analyzer_gmii/hdl/traffic_analyzer_gmii.v \
 $(PWD)/../../lib/hw/lsi/cores/filter_gmii/hdl/filter_gmii.v \
+$(PWD)/../../lib/hw/lsi/cores/packet_mux_gmii/hdl/packet_mux_gmii.v \
 $(PWD)/../../lib/hw/lsi/cores/traffic_analyzer_gmii/hdl/bram_io.v \
-$(PWD)/../../lib/hw/lsi/cores/traffic_analyzer_gmii/hdl/testframe_parser.v
+$(PWD)/../../lib/hw/lsi/cores/traffic_analyzer_gmii/hdl/testframe_parser.v \
+$(PWD)/tester_loop.v
 # use VHDL_SOURCES for VHDL files
 
 # TOPLEVEL is the name of the toplevel module in your Verilog or VHDL file

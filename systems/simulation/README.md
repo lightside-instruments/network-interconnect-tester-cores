@@ -19,6 +19,11 @@ You can use a cocotb/iverilog simulation of a single *traffic_generator_gmii* co
 
 The cocotb simulation after initialization and reset of the design instantiated in [tester_loop.v](tester_loop.v) listens on a socket accepting register *read*, *write*, and simulation *run* and *finish* commands.
 
+Dependencies:
+```
+sudo apt install iverilog
+```
+
 Build the software under network-interconnect-tester/lib/sw/lsi as follows:
 
 ```
@@ -33,9 +38,12 @@ Start a simulation in this directory with the [run.sh](run.sh) wrapper script th
 that accept register read and write accesses from user applications over socket and can run the simulation with the help
 of the sim-run and sim-finish commands:
 
+
 Install cocotbext-axi:
 ```
 git clone https://github.com/alexforencich/cocotbext-axi
+python3 -m venv my_project_env
+source my_project_env/bin/activate
 pip install -e cocotbext-axi
 ```
 

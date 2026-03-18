@@ -1,3 +1,9 @@
+network-interconnect-tester-cores (0.62) noble; urgency=medium
+
+  * Added packet_mux_gmii core and upgraded simulation target with additional tg1 and ta1 instances
+
+ -- Vladimir Vassilev <vladimir@lightside-instruments.com>  Wed, 18 Mar 2026 23:56:11 +0100
+
 network-interconnect-tester-cores (0.61) noble; urgency=medium
 
   * Changed traffic generator frame data format specification from 12AB... to 12:ab...

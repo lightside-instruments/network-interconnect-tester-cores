@@ -6,9 +6,23 @@ CORE_INDEX=$2
 # ! only one instance of the cores supported in simulation mode
 
 if [ "$CORE_NAME" = "traffic_generator_gmii" ]; then
-    echo 0x10000000
+    if [ "$CORE_INDEX" = "0" ]; then
+        echo 0x10000000
+    elif [ "$CORE_INDEX" = "1" ]; then
+        echo 0x11000000
+    else
+        echo "Invalid core name: $CORE_INDEX for $CORE_NAME" 1>&2
+        exit -1
+    fi
 elif [ "$CORE_NAME" = "traffic_analyzer_gmii" ]; then
-    echo 0x20000000
+    if [ "$CORE_INDEX" = "0" ]; then
+        echo 0x20000000
+    elif [ "$CORE_INDEX" = "1" ]; then
+        echo 0x21000000
+    else
+        echo "Invalid core name: $CORE_INDEX for $CORE_NAME" 1>&2
+        exit -1
+    fi
 elif  [ "$CORE_NAME" = "rtclock" ]; then
     echo 0x00000000
 else
