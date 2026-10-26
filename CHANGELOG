@@ -1,3 +1,9 @@
+network-interconnect-tester-cores (0.63) trixie; urgency=medium
+
+  * Added network tester cores (tg0, ta0) instances to litex board targets and connected signals in loopback
+
+ -- Vladimir Vassilev <vladimir@lightside-instruments.com>  Mon, 26 Oct 2026 14:01:30 +0100
+
 network-interconnect-tester-cores (0.62) noble; urgency=medium
 
   * Added packet_mux_gmii core and upgraded simulation target with additional tg1 and ta1 instances

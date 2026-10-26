@@ -27,8 +27,7 @@ from litex.build.generic_platform import Pins
 
 from litex.soc.cores.led import LedChaser
 
-from gateware.traffic_generator_gmii  import traffic_generator_gmii
-from gateware.rtclock  import rtclock
+from gateware.network_tester_cores import network_tester_cores_add, network_tester_cores_configure_csrs
 
 
 # CRG ----------------------------------------------------------------------------------------------
@@ -54,8 +53,7 @@ class _CRG(LiteXModule):
         pll.create_clkout(self.cd_sys, sys_clk_freq)
         platform.add_period_constraint(self.cd_sys.clk, 1e9/sys_clk_freq)
 
-        self.traffic_generator_gmii = traffic_generator_gmii(platform,)
-        self.rtclock = rtclock(platform,)
+        network_tester_cores_add(self, platform, instances=1)
 
 # BaseSoC ------------------------------------------------------------------------------------------
 
@@ -75,6 +73,7 @@ class BaseSoC(SoCCore):
         self.crg = _CRG(platform, sys_clk_freq)
 
         # SoCCore ----------------------------------------------------------------------------------
+        network_tester_cores_configure_csrs(kwargs)
         SoCCore.__init__(self, platform, sys_clk_freq, ident="LiteX SoC on GateMate EVB", **kwargs)
 
         # HyperRAM ---------------------------------------------------------------------------------

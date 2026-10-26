@@ -24,8 +24,7 @@ from litedram.phy import ECP5DDRPHY
 
 from liteeth.phy.ecp5rgmii import LiteEthPHYRGMII
 
-from gateware.traffic_generator_gmii  import traffic_generator_gmii
-from gateware.rtclock  import rtclock
+from gateware.network_tester_cores import network_tester_cores_add, network_tester_cores_configure_csrs
 
 # CRG ----------------------------------------------------------------------------------------------
 
@@ -73,8 +72,7 @@ class _CRG(LiteXModule):
                 o_CDIVX   = self.cd_sys.clk),
             AsyncResetSynchronizer(self.cd_sys, ~pll.locked | self.reset),
         ]
-        self.traffic_generator_gmii = traffic_generator_gmii(platform,)
-        self.rtclock = rtclock(platform,)
+        network_tester_cores_add(self, platform, instances=1)
 
 
 # BaseSoC ------------------------------------------------------------------------------------------
@@ -95,6 +93,7 @@ class BaseSoC(SoCCore):
         self.crg = _CRG(platform, sys_clk_freq)
 
         # SoCCore -----------------------------------------_----------------------------------------
+        network_tester_cores_configure_csrs(kwargs)
         SoCCore.__init__(self, platform, sys_clk_freq, ident="LiteX SoC on Versa ECP5", **kwargs)
 
         # DDR3 SDRAM -------------------------------------------------------------------------------

@@ -24,7 +24,7 @@ class rtclock(LiteXModule):
         # CSR Registers Example.
         # ----------------------
         # Adding a simple CSR storage register for demonstration purposes.
-        self.scratch = CSRStorage(32, description="Scratch register for testing purposes.")
+        self.scratch = CSRStorage(32, name="scratch", description="Scratch register for testing purposes.")
 
         # AXI MMAP Bus (From CPU).
         self.mmap = axi.AXILiteInterface(address_width=12, data_width=32, name="rtclock")
@@ -37,13 +37,26 @@ class rtclock(LiteXModule):
 
 
         # assign fft wrapper ports to appropriate interfaces
-        self.rtclock_params = dict()
-        self.rtclock_params.update(
-            i_clk = ClockSignal(),)
+        self.sec = Signal(48)
+        self.nsec = Signal(30)
+        self.pps = Signal()
+        self.pps2 = Signal()
+        self.rtclock_params = dict(
+            i_clk=ClockSignal(), i_resetn=~ResetSignal(),
+            i_pps=self.pps, i_pps2=self.pps2,
+            o_sec=self.sec, o_nsec=self.nsec,
+            i_S_AXI_ACLK=ClockSignal(), i_S_AXI_ARESETN=~ResetSignal(),
+            i_S_AXI_AWADDR=0, i_S_AXI_AWVALID=0,
+            i_S_AXI_WDATA=0, i_S_AXI_WSTRB=0, i_S_AXI_WVALID=0,
+            i_S_AXI_BREADY=0, i_S_AXI_ARADDR=0, i_S_AXI_ARVALID=0,
+            i_S_AXI_RREADY=0,
+        )
 
         self.specials += Instance(of="rtclock", **self.rtclock_params)
 
 #        platform.add_source("./gateware/rtclock/rtclock_cpu_regs_defines.v")
-        platform.add_source("./gateware/rtclock/rtclock.v")
+        source_dir = os.path.join(os.path.dirname(__file__), "rtclock")
+        platform.add_verilog_include_path(source_dir)
+        platform.add_source(os.path.join(source_dir, "rtclock.v"))
 #        platform.add_source("./gateware/rtclock/rtclock_cpu_regs.v")
 

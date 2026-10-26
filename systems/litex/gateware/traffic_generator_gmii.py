@@ -1,119 +1,88 @@
 #!/usr/bin/env python3
 
 import os
-import sys
-import math
 
 from migen import *
-from migen.genlib.cdc import MultiReg
-from litex.gen import *
+from litex.gen import LiteXModule
+from litex.soc.interconnect.csr import CSR, CSRStorage, CSRStatus
 
-from litex.soc.interconnect                  import stream
-from litex.soc.interconnect.axi.axi_stream   import AXIStreamInterface
-from litex.soc.interconnect.csr              import *
-from litex.soc.interconnect.csr_eventmanager import *
-from litex.soc.interconnect                  import axi  
+
+class _ReadbackStorage(CSRStorage):
+    """Writable CSR whose reads return the core's live register value."""
+    def __init__(self, size, **kwargs):
+        super().__init__(size, **kwargs)
+        self.readback = Signal(size)
+
+    def do_finalize(self, busword, ordering):
+        nwords = (self.size + busword - 1) // busword
+        indices = reversed(range(nwords)) if ordering == "big" else range(nwords)
+        for i in indices:
+            lo = i * busword
+            hi = min(lo + busword, self.size)
+            sc = CSR(hi - lo, name=self.name + str(i))
+            self.simple_csrs.append(sc)
+            self.comb += sc.w.eq(self.readback[lo:hi])
+            self.sync += If(sc.re, self.storage[lo:hi].eq(sc.r))
+        self.sync += self.re.eq(sc.re)
+
 
 class traffic_generator_gmii(LiteXModule):
-    def __init__(self, platform,
-        # Configuration.
-        fft_pts              = 512,     #Changing FFT points requires FFT src rebuild, use rebuild_fft_rtl=True
+    """Expose the generator's registers as ordinary LiteX CSRs.
 
-        ):
+    The native register connection shares the core's datapath register signals
+    with its AXI implementation, without variable-latency AXI transactions.
+    """
+    def __init__(self, platform, instance_number=0):
+        self.id = CSRStatus(32, name="id")
+        self.version = CSRStatus(32, name="version")
+        self.flip = _ReadbackStorage(32, name="flip",
+            description="Reads return the bitwise inverse of the written value.")
+        self.control = CSRStorage(32, name="control")
+        self.interframe_gap = CSRStorage(32, reset=12, name="interframe_gap")
+        self.interburst_gap = CSRStorage(32, reset=12, name="interburst_gap")
+        self.frames_per_burst = CSRStorage(32, name="frames_per_burst")
+        self.total_frames = CSRStorage(64, name="total_frames")
+        self.pkts = CSRStatus(64, name="pkts")
+        self.frame_size = CSRStorage(32, reset=72, name="frame_size")
+        self.frame_buf = CSRStorage(32, name="frame_buf",
+            description="Each write stores a frame word and advances the buffer address.")
+        self.frame_buf_address = CSRStorage(32, name="frame_buf_address",
+            description="Sets the frame buffer write address (low 9 bits).")
 
-        # CSR Registers Example.
-        # ----------------------
-        # Adding a simple CSR storage register for demonstration purposes.
-        self.scratch = CSRStorage(32, description="Scratch register for testing purposes.")
-
-        # AXI MMAP Bus (From CPU).
-        self.mmap = axi.AXILiteInterface(address_width=12, data_width=32, name="traffic_generator_gmii")
-        
-        # # #    
-        # AXI MMAP.
-        # ---------
-        self.ram = axi.AXILiteSRAM(0x1000)
-        self.comb += self.mmap.connect(self.ram.bus)
-
-
-        # assign fft wrapper ports to appropriate interfaces
-        self.traffic_generator_gmii_params = dict()
-        self.traffic_generator_gmii_params.update(
-            i_clk = ClockSignal(),
-            #i_resetn=self.resetn,
-            #o_gmii_d=self.gmii_d,
-            #o_gmii_en=self.gmii_en,
-            #o_gmii_er=self.gmii_er,
-            #o_cycle_start=self.cycle_start,
-            #i_sec=self.sec,
-            #i_nsec=self.nsec,
-            i_S_AXI_ACLK=ClockSignal(),
-            #i_S_AXI_ARESETN=self.S_AXI_ARESETN,
-            #i_S_AXI_AWADDR=self.S_AXI_AWADDR,
-            #i_S_AXI_AWVALID=self.S_AXI_AWVALID,
-            #i_S_AXI_WDATA=self.S_AXI_WDATA,
-            #i_S_AXI_WSTRB=self.S_AXI_WSTRB,
-            #i_S_AXI_WVALID=self.S_AXI_WVALID,
-            #i_S_AXI_BREADY=self.S_AXI_BREADY,
-            #i_S_AXI_ARADDR=self.S_AXI_ARADDR,
-            #i_S_AXI_ARVALID=self.S_AXI_ARVALID,
-            #i_S_AXI_RREADY=self.S_AXI_RREADY,
-            #o_S_AXI_ARREADY=self.S_AXI_ARREADY,
-            #o_S_AXI_RDATA=self.S_AXI_RDATA,
-            #o_S_AXI_RRESP=self.S_AXI_RRESP,
-            #o_S_AXI_RVALID=self.S_AXI_RVALID,
-            #o_S_AXI_WREADY=self.S_AXI_WREADY,
-            #o_S_AXI_BRESP=self.S_AXI_BRESP,
-            #o_S_AXI_BVALID=self.S_AXI_BVALID,
-            #o_S_AXI_AWREADY=self.S_AXI_AWREADY,
+        self.gmii_d = Signal(8)
+        self.gmii_en = Signal()
+        self.gmii_er = Signal()
+        self.cycle_start = Signal()
+        self.sec = Signal(48)
+        self.nsec = Signal(30)
+        self.traffic_generator_gmii_params = dict(
+            p_C_USE_LITEX_CSR=1,
+            i_clk=ClockSignal(), i_resetn=~ResetSignal(),
+            o_gmii_d=self.gmii_d, o_gmii_en=self.gmii_en, o_gmii_er=self.gmii_er,
+            o_cycle_start=self.cycle_start, i_sec=self.sec, i_nsec=self.nsec,
+            o_csr_id=self.id.status, o_csr_version=self.version.status,
+            i_csr_flip=self.flip.storage, o_csr_flip_read=self.flip.readback,
+            i_csr_control=self.control.storage,
+            i_csr_interframe_gap=self.interframe_gap.storage,
+            i_csr_interburst_gap=self.interburst_gap.storage,
+            i_csr_frames_per_burst=self.frames_per_burst.storage,
+            i_csr_total_frames=self.total_frames.storage, o_csr_pkts=self.pkts.status,
+            i_csr_frame_size=self.frame_size.storage,
+            i_csr_frame_size_we=self.frame_size.re,
+            i_csr_frame_buf=self.frame_buf.storage, i_csr_frame_buf_we=self.frame_buf.re,
+            i_csr_frame_buf_address=self.frame_buf_address.storage[:9],
+            i_csr_frame_buf_address_we=self.frame_buf_address.re,
+            i_S_AXI_ACLK=ClockSignal(), i_S_AXI_ARESETN=~ResetSignal(),
+            i_S_AXI_AWADDR=0, i_S_AXI_AWVALID=0,
+            i_S_AXI_WDATA=0, i_S_AXI_WSTRB=0, i_S_AXI_WVALID=0,
+            i_S_AXI_BREADY=0, i_S_AXI_ARADDR=0, i_S_AXI_ARVALID=0,
+            i_S_AXI_RREADY=0,
         )
-#    parameter C_S_AXI_DATA_WIDTH    = 32,
-#    parameter C_S_AXI_ADDR_WIDTH    = 12,
-#    parameter C_BASEADDR            = 32'h00000000,
-#    parameter C_FRAME_BUF_ADDRESS_WIDTH   = 9
-# )
-# (
-#     // Global Ports
-#     input clk,
-#     input resetn,
+        self.specials += Instance("traffic_generator_gmii",
+            name="traffic_generator_gmii_{}".format(instance_number),
+            **self.traffic_generator_gmii_params)
 
-#     // GMII OUT ports
-#     output reg [8 - 1:0] gmii_d,
-#     output reg gmii_en,
-#     output reg gmii_er,
-# 
-#    output reg cycle_start,
-#
-#    input [47:0] sec,
-#    input [29:0] nsec,
-#
-#    // Slave AXI Ports
-#    input                                     S_AXI_ACLK,
-#    input                                     S_AXI_ARESETN,
-#    input      [C_S_AXI_ADDR_WIDTH-1 : 0]     S_AXI_AWADDR,
-#    input                                     S_AXI_AWVALID,
-#    input      [C_S_AXI_DATA_WIDTH-1 : 0]     S_AXI_WDATA,
-#    input      [C_S_AXI_DATA_WIDTH/8-1 : 0]   S_AXI_WSTRB,
-#    input                                     S_AXI_WVALID,
-#    input                                     S_AXI_BREADY,
-#    input      [C_S_AXI_ADDR_WIDTH-1 : 0]     S_AXI_ARADDR,
-#    input                                     S_AXI_ARVALID,
-#    input                                     S_AXI_RREADY,
-#    output                                    S_AXI_ARREADY,
-#    output     [C_S_AXI_DATA_WIDTH-1 : 0]     S_AXI_RDATA,
-#    output     [1 : 0]                        S_AXI_RRESP,
-#    output                                    S_AXI_RVALID,
-#    output                                    S_AXI_WREADY,
-#    output     [1 :0]                         S_AXI_BRESP,
-#    output                                    S_AXI_BVALID,
-#    output                                    S_AXI_AWREADY
-
-        self.specials += Instance(of="traffic_generator_gmii", **self.traffic_generator_gmii_params)
-
-#        platform.add_source("./gateware/traffic_generator_gmii/traffic_generator_gmii_cpu_regs_defines.v")
-        platform.add_source("./gateware/traffic_generator_gmii/traffic_generator_gmii.v")
-#        platform.add_source("./gateware/traffic_generator_gmii/traffic_generator_gmii_cpu_regs.v")
-#        platform.add_source("./gateware/traffic_generator_gmii/traffic_generator_gmii_cpu_regs_defines.v")
-#        platform.add_source("./gateware/traffic_generator_gmii/ethernet_crc_8.v")
-        platform.add_source("./gateware/traffic_generator_gmii/bram_io.v")
-
+        source_dir = os.path.join(os.path.dirname(__file__), "traffic_generator_gmii")
+        platform.add_verilog_include_path(source_dir)
+        for source in ("traffic_generator_gmii.v", "ethernet_crc_8.v", "bram_io.v"):
+            platform.add_source(os.path.join(source_dir, source))
