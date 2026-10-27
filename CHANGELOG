@@ -1,3 +1,9 @@
+network-interconnect-tester-cores (0.64) trixie; urgency=medium
+
+* LiteX/gsd_orangecrab connected the current clock (48MHz) used in the network tester cores instances to the pair connected to TX0+/TX0- pins
+
+ -- Vladimir Vassilev <vladimir@lightside-instruments.com>  Tue, 27 Oct 2026 14:45:44 +0100
+
 network-interconnect-tester-cores (0.63) trixie; urgency=medium
 
   * Added network tester cores (tg0, ta0) instances to litex board targets and connected signals in loopback

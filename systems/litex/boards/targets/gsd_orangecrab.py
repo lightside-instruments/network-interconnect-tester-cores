@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 #
-# This file is part of LiteX-Boards.
+# This file was originally part of LiteX-Boards.
 #
 # Copyright (c) Greg Davill <greg.davill@gmail.com>
 # SPDX-License-Identifier: BSD-2-Clause
@@ -15,7 +15,7 @@ from migen.genlib.resetsync import AsyncResetSynchronizer
 from litex.gen import *
 from litex.gen.genlib.misc import WaitTimer
 
-from litex_boards.platforms import gsd_orangecrab
+from boards.platforms import gsd_orangecrab
 
 from litex.soc.cores.clock import *
 from litex.soc.integration.soc_core import *
@@ -145,6 +145,12 @@ class _CRGSDRAM(LiteXModule):
             self.comb += platform.request("rst_n").eq(~reset_timer.done)
 
         network_tester_cores_add(self, platform, instances=1)
+        gmii_en_lvds = platform.request("gmii_en_lvds")
+        # Separate CMOS outputs avoid unsupported differential I/O modes.
+        self.comb += [
+            gmii_en_lvds.p.eq(ClockSignal("sys")),
+            gmii_en_lvds.n.eq(~ClockSignal("sys")),
+        ]
 
 # BaseSoC ------------------------------------------------------------------------------------------
 
