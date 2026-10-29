@@ -11,6 +11,47 @@ Files: systems/ethernet96/*
 Copyright: 2019 Opsero Electronic Design Inc.
 License: MIT
 
+Files: lib/hw/lsi/cores/pcs_1000basex_rx/*
+       lib/hw/lsi/cores/pcs_1000basex_tx/*
+       systems/litex/gateware/network_tester_reset_sync.v
+Copyright: 2026 Lightside Instruments AS
+License: BSD-2-Clause
+
+Files: lib/hw/lsi/cores/pcs_1000basex_tx/hdl/encoder_8b10b.v
+       lib/hw/lsi/cores/pcs_1000basex_rx/hdl/decoder_8b10b.v
+Copyright: 2016-2017 Sebastien Bourdeauducq <sb@m-labs.hk>
+           2019-2020 Florent Kermarrec <florent@enjoy-digital.fr>
+           2026 Lightside Instruments AS
+License: BSD-2-Clause
+Comment: Encoding tables and algorithm adapted from LiteX code_8b10b.py.
+         The decoder lookup derives from the transmitter's LiteX vectors.
+
+Files: systems/litex/boards/platforms/gsd_orangecrab.py
+Copyright: 2020 Greg Davill <greg.davill@gmail.com>
+           2026 Lightside Instruments AS
+License: BSD-2-Clause
+
+Files: systems/litex/boards/targets/gsd_orangecrab.py
+Copyright: Greg Davill <greg.davill@gmail.com>
+           2026 Lightside Instruments AS
+License: BSD-2-Clause
+
+Files: systems/litex/boards/targets/lattice_versa_ecp5.py
+Copyright: 2018-2019 Florent Kermarrec <florent@enjoy-digital.fr>
+           2018-2019 David Shah <dave@ds0.me>
+           2026 Lightside Instruments AS
+License: BSD-2-Clause
+
+Files: systems/litex/boards/targets/colognechip_gatemate_evb.py
+Copyright: 2023 Gwenhael Goavec-merou <gwenhael.goavec-merou@trabucayre.com>
+           2026 Lightside Instruments AS
+License: BSD-2-Clause
+
+Files: systems/litex/boards/targets/olimex_gatemate_a1_evb.py
+Copyright: 2024 Gwenhael Goavec-merou <gwenhael.goavec-merou@trabucayre.com>
+           2026 Lightside Instruments AS
+License: BSD-2-Clause
+
 License: GPL-3+
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
@@ -48,3 +89,25 @@ License: MIT
  ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE.
+
+License: BSD-2-Clause
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions are met:
+ .
+ 1. Redistributions of source code must retain the above copyright notice,
+    this list of conditions and the following disclaimer.
+ 2. Redistributions in binary form must reproduce the above copyright notice,
+    this list of conditions and the following disclaimer in the documentation
+    and/or other materials provided with the distribution.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ POSSIBILITY OF SUCH DAMAGE.

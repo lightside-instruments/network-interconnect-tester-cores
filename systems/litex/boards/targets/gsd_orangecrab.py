@@ -25,12 +25,13 @@ from litex.soc.cores.led import LedChaser
 from litedram.modules import MT41K64M16, MT41K128M16, MT41K256M16, MT41K512M16
 from litedram.phy import ECP5DDRPHY
 
-from gateware.network_tester_cores import network_tester_cores_add, network_tester_cores_configure_csrs
+from gateware.network_tester_cores import (network_tester_cores_add, network_tester_cores_configure_csrs,
+    network_tester_cores_add_arguments, network_tester_cores_options)
 
 # CRG ---------------------------------------------------------------------------------------------
 
 class _CRG(LiteXModule):
-    def __init__(self, platform, sys_clk_freq, with_usb_pll=False, with_dfu_rst=True):
+    def __init__(self, platform, sys_clk_freq, with_usb_pll=False, with_dfu_rst=True, network_tester_options=None):
         self.rst    = Signal()
         self.cd_por = ClockDomain()
         self.cd_sys = ClockDomain()
@@ -74,8 +75,14 @@ class _CRG(LiteXModule):
             self.comb += reset_timer.wait.eq(~rst_n)
             self.comb += platform.request("rst_n").eq(~reset_timer.done)
 
+        network_tester_cores_add(self, platform, instances=1, sys_clk_freq=sys_clk_freq,
+                                  **(network_tester_options or {}))
+        self.comb += platform.request("tx1").eq(self.traffic_generator_gmii_0.cycle_start)
+        self.comb += platform.request("tx2").eq(self.traffic_generator_gmii_0.gmii_en)
+
+
 class _CRGSDRAM(LiteXModule):
-    def __init__(self, platform, sys_clk_freq, with_usb_pll=False, with_dfu_rst=True):
+    def __init__(self, platform, sys_clk_freq, with_usb_pll=False, with_dfu_rst=True, network_tester_options=None):
         self.rst = Signal()
         self.cd_init     = ClockDomain()
         self.cd_por      = ClockDomain()
@@ -144,13 +151,17 @@ class _CRGSDRAM(LiteXModule):
             self.comb += reset_timer.wait.eq(~rst_n)
             self.comb += platform.request("rst_n").eq(~reset_timer.done)
 
-        network_tester_cores_add(self, platform, instances=1)
-        gmii_en_lvds = platform.request("gmii_en_lvds")
-        # Separate CMOS outputs avoid unsupported differential I/O modes.
-        self.comb += [
-            gmii_en_lvds.p.eq(ClockSignal("sys")),
-            gmii_en_lvds.n.eq(~ClockSignal("sys")),
-        ]
+        network_tester_cores_add(self, platform, instances=1, sys_clk_freq=sys_clk_freq,
+                                  **(network_tester_options or {}))
+        self.comb += platform.request("tx1").eq(self.traffic_generator_gmii_0.cycle_start)
+        self.comb += platform.request("tx2").eq(self.traffic_generator_gmii_0.gmii_en)
+        if (network_tester_options or {}).get("mode") != "serial_external":
+            gmii_en_lvds = platform.request("gmii_en_lvds")
+            # Separate CMOS outputs avoid unsupported differential I/O modes.
+            self.comb += [
+                gmii_en_lvds.p.eq(self.network_tester_tx_clk),
+                gmii_en_lvds.n.eq(~self.network_tester_tx_clk),
+            ]
 
 # BaseSoC ------------------------------------------------------------------------------------------
 
@@ -162,9 +173,13 @@ class BaseSoC(SoCCore):
         **kwargs):
         platform = gsd_orangecrab.Platform(revision=revision, device=device ,toolchain=toolchain)
 
+        network_tester_options = network_tester_cores_options(
+            platform, kwargs, default_serial_resource="network_tester_serial")
+
         # CRG --------------------------------------------------------------------------------------
         crg_cls      = _CRGSDRAM if kwargs.get("integrated_main_ram_size", 0) == 0 else _CRG
-        self.crg = crg_cls(platform, sys_clk_freq, with_usb_pll=True, with_dfu_rst=with_dfu_rst)
+        self.crg = crg_cls(platform, sys_clk_freq, with_usb_pll=True, with_dfu_rst=with_dfu_rst,
+                           network_tester_options=network_tester_options)
 
         # SoCCore ----------------------------------------------------------------------------------
         # Defaults to USB ACM through ValentyUSB.
@@ -218,6 +233,7 @@ def main():
     parser.add_target_argument("--sdram-device",    default="MT41K64M16",     help="SDRAM device (MT41K64M16, MT41K128M16, MT41K256M16 or MT41K512M16).")
     parser.add_target_argument("--with-spi-sdcard", action="store_true",      help="Enable SPI-mode SDCard support.")
     parser.add_target_argument("--without-dfu-rst", action="store_true",      help="Disable DFU Reset when pressing Button for 1s.")
+    network_tester_cores_add_arguments(parser)
     args = parser.parse_args()
 
     soc = BaseSoC(
@@ -227,6 +243,10 @@ def main():
         sdram_device = args.sdram_device,
         sys_clk_freq = args.sys_clk_freq,
         with_dfu_rst = not args.without_dfu_rst,
+        network_tester_mode = args.network_tester_mode,
+        network_tester_serial_tx_pin = args.network_tester_serial_tx_pin,
+        network_tester_serial_rx_pin = args.network_tester_serial_rx_pin,
+        network_tester_serial_io_standard = args.network_tester_serial_io_standard,
         **parser.soc_argdict)
     if args.with_spi_sdcard:
         soc.add_spi_sdcard()

@@ -11,11 +11,24 @@ from litex.build.dfu import DFUProg
 # IOs ----------------------------------------------------------------------------------------------
 
 _io_r0_1 = [
-    # PB6A/PB6B: generator sys clock monitor as complementary 3.3 V outputs.
+    # PB6A/PB6B: generator GMII clock monitor as complementary 3.3 V outputs.
     ("gmii_en_lvds", 0,
         Subsignal("p", Pins("N17")),
         Subsignal("n", Pins("M18")),
         IOStandard("LVCMOS33"),
+    ),
+
+    # Generator cycle-start marker.
+    ("tx1", 0, Pins("B10"), IOStandard("LVCMOS33")),
+    ("tx2", 0, Pins("B9"), IOStandard("LVCMOS33")),
+
+    # External serial mode: complementary 3.3 V TX and RX pairs.
+    ("network_tester_serial", 0,
+        Subsignal("tx0_p", Pins("N17"), IOStandard("LVCMOS33")),
+        Subsignal("tx0_n", Pins("M18"), IOStandard("LVCMOS33")),
+        # Top-edge bank 1 does not support a native LVDS receiver.
+        Subsignal("rx0_p", Pins("B8"), IOStandard("LVCMOS33")),
+        Subsignal("rx0_n", Pins("C8"), IOStandard("LVCMOS33")),
     ),
 
     # Clk / Rst
@@ -96,11 +109,24 @@ _io_r0_1 = [
 ]
 
 _io_r0_2 = [
-    # PB6A/PB6B: generator sys clock monitor as complementary 3.3 V outputs.
+    # PB6A/PB6B: generator GMII clock monitor as complementary 3.3 V outputs.
     ("gmii_en_lvds", 0,
         Subsignal("p", Pins("N17")),
         Subsignal("n", Pins("M18")),
         IOStandard("LVCMOS33"),
+    ),
+
+    # Generator cycle-start marker.
+    ("tx1", 0, Pins("B10"), IOStandard("LVCMOS33")),
+    ("tx2", 0, Pins("B9"), IOStandard("LVCMOS33")),
+
+    # External serial mode: complementary 3.3 V TX and RX pairs.
+    ("network_tester_serial", 0,
+        Subsignal("tx0_p", Pins("N17"), IOStandard("LVCMOS33")),
+        Subsignal("tx0_n", Pins("M18"), IOStandard("LVCMOS33")),
+        # Top-edge bank 1 does not support a native LVDS receiver.
+        Subsignal("rx0_p", Pins("B8"), IOStandard("LVCMOS33")),
+        Subsignal("rx0_n", Pins("C8"), IOStandard("LVCMOS33")),
     ),
 
     # Clk / Rst
