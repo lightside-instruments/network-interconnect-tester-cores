@@ -4,13 +4,16 @@ import os
 
 from migen import *
 from litex.gen import LiteXModule
+from gateware.traffic_csr import TrafficControlQueue
 from litex.soc.interconnect.csr import CSRStorage, CSRStatus
 from gateware.traffic_generator_gmii import _ReadbackStorage
 
 
 class traffic_analyzer_gmii(LiteXModule):
     """Expose analyzer configuration, statistics and capture as native CSRs."""
-    def __init__(self, platform, instance_number=0):
+    def __init__(self, platform, instance_number=0, datapath_clk=None, datapath_reset=None, datapath_domain=None):
+        datapath_clk = ClockSignal("sys") if datapath_clk is None else datapath_clk
+        datapath_reset = ResetSignal("sys") if datapath_reset is None else datapath_reset
         self.id = CSRStatus(32, name="id")
         self.version = CSRStatus(32, name="version")
         self.flip = _ReadbackStorage(32, name="flip")
@@ -50,13 +53,18 @@ class traffic_analyzer_gmii(LiteXModule):
         self.gmii_er = Signal()
         self.sec = Signal(48)
         self.nsec = Signal(30)
+        control = self.control.storage
+        if datapath_domain is not None:
+            self.control_cdc = TrafficControlQueue(self.control, datapath_domain,
+                                                   datapath_reset, reset_value=1)
+            control = self.control_cdc.value
         self.traffic_analyzer_gmii_params = dict(
             p_C_USE_LITEX_CSR=1,
-            i_clk=ClockSignal(), i_resetn=~ResetSignal(),
+            i_clk=datapath_clk, i_resetn=~datapath_reset,
             i_gmii_d=self.gmii_d, i_gmii_en=self.gmii_en, i_gmii_er=self.gmii_er,
             i_sec=self.sec, i_nsec=self.nsec,
             i_csr_flip=self.flip.storage, o_csr_flip_read=self.flip.readback,
-            i_csr_control=self.control.storage,
+            i_csr_control=control,
             i_csr_testframe_filter_data=self.testframe_filter_data.storage,
             i_csr_testframe_filter_mask=self.testframe_filter_mask.storage,
             i_csr_frame_buf_address=self.frame_buf_address.storage[:9],

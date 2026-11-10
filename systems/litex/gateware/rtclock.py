@@ -18,6 +18,8 @@ class rtclock(LiteXModule):
     def __init__(self, platform,
         # Configuration.
         fft_pts              = 512,     #Changing FFT points requires FFT src rebuild, use rebuild_fft_rtl=True
+        datapath_clk         = None,
+        datapath_reset       = None,
 
         ):
 
@@ -42,7 +44,8 @@ class rtclock(LiteXModule):
         self.pps = Signal()
         self.pps2 = Signal()
         self.rtclock_params = dict(
-            i_clk=ClockSignal(), i_resetn=~ResetSignal(),
+            i_clk=ClockSignal() if datapath_clk is None else datapath_clk,
+            i_resetn=~(ResetSignal() if datapath_reset is None else datapath_reset),
             i_pps=self.pps, i_pps2=self.pps2,
             o_sec=self.sec, o_nsec=self.nsec,
             i_S_AXI_ACLK=ClockSignal(), i_S_AXI_ARESETN=~ResetSignal(),

@@ -26,3 +26,949 @@ Example:
             i_resetn=self.resetn,
             o_gmii_d=self.gmii_d,
  ...
+
+
+==lsi_orangecrab==
+
+python3 -m boards.targets.gsd_orangecrab --device 85F --cpu-type vexriscv --cpu-variant linux --bus-standard axi-lite --log-filename log.txt --build
+eccprog ./build/gsd_orangecrab/gateware/gsd_orangecrab.bit
+
+
+==Traffic generator LiteX CSRs==
+
+The wrapper exposes the core's registers directly as named LiteX CSRs:
+id, version, flip, control, interframe_gap, interburst_gap, frames_per_burst,
+total_frames (64 bits), pkts (64 bits), frame_size, frame_buf and
+frame_buf_address. There is no software AXI transaction protocol.
+
+Each board target currently enables traffic_generator_gmii_0 under crg.
+Its generated csr.csv/csr.h prefix is crg_traffic_generator_gmii_0_.
+The shared helper supports additional numbered instances when requested.
+For example, configure and read instance 0:
+
+ crg_traffic_generator_gmii_0_interframe_gap_write(12);
+ crg_traffic_generator_gmii_0_frame_size_write(72);
+ crg_traffic_generator_gmii_0_frame_buf_address_write(0);
+ crg_traffic_generator_gmii_0_frame_buf_write(0x11223344);
+ crg_traffic_generator_gmii_0_total_frames_write(100);
+ crg_traffic_generator_gmii_0_control_write(1);
+ uint64_t sent = crg_traffic_generator_gmii_0_pkts_read();
+
+Use the generated addresses and accessors: LiteX allocates CSR addresses and
+splits wide registers according to its configured CSR width and ordering.
+The old AXI byte offsets are not used as LiteX CSR offsets. Reads of writable
+configuration CSRs return their stored configuration; flip reads return the
+core's inverted value. pkts is the live core counter; multiword reads are not
+atomic. Each frame_buf write stores a word and advances the internal address.
+Writing frame_size resets that address; frame_buf_address sets it explicitly
+(low 9 bits), and its CSR readback is the last value written.
+
+The Verilog core selects the native register connection with C_USE_LITEX_CSR=1.
+Its default (0) retains the original AXI register block for other systems.
+CSR storage and buffer-write strobes stay in sys. Instance 0's transmit
+logic uses the scaled PCS GMII clock. Ordered control writes cross through
+a small queue; status reads must allow time for the slower datapath to update.
+
+Register tests (with Migen and LiteX available on PYTHONPATH):
+ cd systems/litex
+ python3 -m unittest discover -s tests -v
+
+==Traffic analyzer LiteX CSRs==
+
+Each board target currently instantiates traffic_analyzer_gmii_0 under crg,
+with generated prefix crg_traffic_analyzer_gmii_0_. It exposes
+native configuration, packet/octet/error counters, capture timestamps,
+frame_size, frame_buf, latency and sequence-error statistics. flip supports
+the same inverted readback as the generator. control defaults to 1:
+bit 0 enables analysis, and bit 1 freezes statistics and capture.
+
+For capture reads, set frame_buf_address to the desired word index (low
+9 bits), then read frame_buf. Unlike the AXI streaming read interface,
+CSR reads do not advance the address; software selects each word explicitly.
+The synchronous capture RAM settles before the following CSR read. Freeze
+capture before reading a frame that must remain stable. Multiword counter
+reads are not atomic; use the core's freeze control when appropriate.
+
+The 320-bit testframe_filter_data and testframe_filter_mask CSRs directly
+configure the parser's 40-byte filter. Use the addresses and word ordering
+in generated csr.csv/csr.h when accessing these wide registers.
+
+The analyzer's default Verilog mode retains AXI; its LiteX wrapper selects
+C_USE_LITEX_CSR=1. GMII and sec/nsec inputs are exposed for board wiring.
+Generator 0 feeds gmii_to_1000basex, whose serial output feeds
+basex1000_to_gmii. Its recovered GMII output feeds analyzer 0. The shared
+wrapper supplies scaled clocks derived from sys; there is no direct GMII bypass.
+The board targets use CSR pages of at least 4 KiB to fit both generators and
+both analyzers with an 8-bit CSR bus. Rebuild software using the newly
+generated CSR addresses. The register tests simulate all four instances.
+
+Generator 0 and analyzer 0 receive stable falling-edge snapshots of the shared
+rtclock time before their respective GMII rising edges.
+
+==Simple generator 0 to analyzer 0 register sequence==
+
+See examples/gmii_loopback.c for a minimal on-CPU C example using generated
+CSR accessors. Call gmii_loopback_test(): 0 means one valid packet received;
+-1 means timeout or an unexpected count. It stops the generator, clears and
+enables the analyzer, loads a complete 72-byte static wire frame (including
+preamble and valid FCS), sets total_frames=1, and starts control=1. The
+confirmation read is crg_traffic_analyzer_gmii_0_pkts_read(), expected to
+be 1. The analyzer remains enabled so its counters can be inspected afterward.
+The polling limit is finite rather than a calibrated wall-clock timeout.
+
+==Shared board integration==
+
+Traffic-core creation, instance 0 serial PCS/PMA loopback and time connections live
+in gateware/network_tester_cores.py. Board targets call
+network_tester_cores_add(self, platform, instances=N, sys_clk_freq=sys_clk_freq)
+on the CRG and
+network_tester_cores_configure_csrs(kwargs) before SoCCore initialization. Cores attach
+directly to the CRG, preserving existing CSR prefixes and register order.
+All four board targets enable one generator/analyzer pair (instance 0).
+
+==OrangeCrab generator clock complementary output==
+
+The local boards/platforms/gsd_orangecrab.py reserves N17 (PB6A, positive)
+and M18 (PB6B, negative) as gmii_en_lvds. Both pads use LVCMOS33.
+GPIO connector positions 0 and 1 are unavailable, and feather_serial is
+empty because those pins are now reserved. Other connector indices remain
+unchanged. The target drives N17 with the generator's transmit GMII clock and M18
+with its inverse using two ordinary CMOS outputs. These are complementary
+3.3 V signals, not LVDS levels. The two output paths can have skew.
+The resource keeps its historical gmii_en_lvds name.
+
+==Standalone 1000BASE-X transmit PCS/PMA==
+
+lib/hw/lsi/cores/pcs_1000basex_tx contains a Verilog GMII-to-1000BASE-X
+transmitter. Its top gmii_to_1000basex takes a 1.25 GHz bit clock and
+returns a 125 MHz clock for the upstream GMII producer. It includes
+8b/10b coding, ordered sets and a digital 10:1 PMA serializer. See that
+core's README.md for clock/reset requirements, configuration and tests.
+The standalone core documents nominal clock rates. Board integration now
+uses the scaled serial loopback described below without changing sys.
+
+==Standalone 100BASE-X transmit PCS/PMA==
+
+lib/hw/lsi/cores/pcs_100basex_tx provides matching Verilog files for
+100BASE-FX (default 4B/5B + NRZI) and an optional scrambled 100BASE-TX
+digital transmit path with MLT-3 level outputs. Its input clock is 125 MHz
+and its returned byte-wide producer clock is 12.5 MHz, for 100 Mbit/s data.
+It is not standard 25 MHz nibble-wide MII. Board/system clocks are unchanged.
+See the core README.md for instantiation, interfaces and tests.
+
+==Standalone 10BASE-FL transmitter==
+
+lib/hw/lsi/cores/pcs_10basefl_tx adds matching byte-front-end, Manchester
+encoder and digital PMA files. gmii_to_10basefl takes a 20 MHz half-bit
+clock and returns a 1.25 MHz byte clock. It preserves the complete frame,
+serializes LSB-first at 10 Mbit/s, and generates 800 ns low-light start of
+idle followed by 1 MHz optical idle. OUTPUT_INVERT controls the external
+driver polarity. See its README.md for interface/reset requirements and
+scope. The board/system clocks and pins are unchanged.
+
+==Standalone oversampled 100BASE-X receiver==
+
+lib/hw/lsi/cores/pcs_100basex_rx adds the receive counterpart for the
+unscrambled 100BASE-FX NRZI line. basex_to_gmii uses a 500 MHz sample clock
+by default (4x oversampling) to recover 125 Mbit/s code bits, detect /J/K/,
+decode 4B/5B and generate byte-wide GMII-style data at about 12.5 MHz.
+Both a recovered byte clock and sample-domain gmii_rx_ce are available.
+It does not decode analog copper MLT-3 or acquire a TX scrambler sequence.
+See its README.md for interfaces, CDR limitations, framing and tests.
+
+==Standalone oversampled 1000BASE-X receiver==
+
+lib/hw/lsi/cores/pcs_1000basex_rx uses the 100BASE-X receive structure
+at the requested 5 GHz sampling clock (4x a 1.25 Gbit/s NRZ line).
+basex1000_to_gmii adds comma alignment, 8b/10b and disparity checking,
+idle/configuration decoding and 125 MHz GMII output. It includes both
+recovered-clock and sample-domain clock-enable interfaces. No sampling
+clock reduction or board/system-clock change is made. See the core README.md
+for acquisition policy, diagnostics and tests.
+
+==Scaled 1000BASE-X serial loopback in network_tester_cores==
+
+Data path:
+ traffic_generator_gmii_0 -> gmii_to_1000basex -> serial ->
+ basex1000_to_gmii -> traffic_analyzer_gmii_0
+
+The shared gateware/pcs_1000basex_loopback.py wrapper supplies:
+ bit_clk_x4 = sys                  (48 MHz on default OrangeCrab)
+ bit_clk = bit_clk_x4 / 4          (12 MHz)
+ TX and recovered RX GMII clocks   (approximately 1.2 MHz)
+
+The PCS algorithms retain their 4x oversampling ratio. The link operates at
+48/5000 of the nominal rate: 12 Mbit/s serial and 9.6 Mbit/s byte data.
+Other board targets keep their own sys frequencies and scale proportionally.
+No external clock inputs, high-speed PLL or system-frequency change is needed.
+
+The generator datapath runs on the TX GMII clock; the analyzer runs on the
+recovered RX GMII clock. Generated clocks have asynchronous reset assertion
+and synchronized release, including while the RX clock is stopped. Generator
+run is gated until CDR/PCS lock and recovered reset have settled. A software
+start request made during training is retained and starts automatically.
+
+CSR names/order are preserved. Their storage remains in sys. Generator
+frame-buffer writes and auto-increment address logic use the CSR clock;
+reading the transmit RAM uses its slower datapath clock. Capture RAM reads
+remain in sys. The control registers have 16-entry ordered crossing queues,
+so a short disable/enable sequence is not lost between slow datapath edges.
+Do not exceed the queue capacity; overflow is available as an HDL diagnostic.
+Allow control writes to drain before reconfiguring an active frame buffer or
+assuming counters have cleared. Live counter reads remain non-atomic; use
+freeze and allow it to reach the analyzer before reading wide statistics.
+
+Shared time is snapped on each GMII falling edge in sys and held stable for
+the next datapath rising edge. These are snapshots, not simultaneous reads
+of the running counter; there can be up to one byte-clock period of age.
+rtclock itself stays on sys and its existing tick configuration is unchanged.
+This integration does not calibrate physical time or latency measurements.
+
+In serial_loopback mode on OrangeCrab, N17/M18 monitor the TX GMII clock and
+its inverse (nominal 1.2 MHz), still as complementary LVCMOS33 outputs.
+Generated-clock period constraints are installed using each target's sys rate.
+
+Validation: 8-bit and 32-bit CSR simulations verify clock ratios, frame RAM,
+valid-CRC reception over the entire serial path, coherent time snapshots and
+ordered control restart/reset. Yosys hierarchy/structural checks pass after
+flattening/optimizing unused interface logic. Full board place-and-route and
+hardware operation have not been verified for this integration.
+
+==Selectable network tester data paths==
+
+All four board targets accept:
+ --network-tester-mode gmii             direct generator-to-analyzer GMII on sys
+ --network-tester-mode serial_loopback  internal serial loopback (default)
+ --network-tester-mode serial_external  independent board serial TX and RX
+
+The Python API is network_tester_cores_add(..., mode="...", serial_pads=pads).
+Single-ended pads expose tx and rx. Differential pads expose tx.p/tx.n and
+rx.p/rx.n: TX uses complementary CMOS outputs. RX uses a DifferentialInput,
+or digital p & ~n when pads.complementary_rx is True.
+An optional signal_detect pad controls receiver signal detection; otherwise
+signal detection is asserted. Only pair 0 is connected; additional numbered
+pairs remain available for custom wiring. CSR names and addresses are unchanged.
+External TX starts independently of RX lock; the analyzer waits for RX lock.
+Both serial modes retain bit_clk_x4=sys, bit_clk=sys/4 and GMII=sys/40.
+
+OrangeCrab external mode has fixed default pin assignments:
+ tx0_p = N17, tx0_n = M18: complementary LVCMOS33 outputs
+ rx0_p = B8,  rx0_n = C8: complementary LVCMOS33 inputs (rx0 = p & ~n)
+The internal PCS serial nets are named tx0 and rx0. In external mode the
+N17/M18 clock monitor is replaced by serial TX. The other two modes keep the
+clock monitor (sys for GMII mode, TX GMII clock for serial loopback).
+Both pairs use the 3.3 V CMOS workaround. Bank 1 top-edge pins do not support
+a native differential input in the ECP5 toolchain. This is not LVDS signaling;
+an LVDS-level source needs external conversion before the CMOS receive pins.
+
+Other boards require explicit free single-ended pins, for example:
+ --network-tester-mode serial_external \
+ --network-tester-serial-tx-pin <TX_PIN> --network-tester-serial-rx-pin <RX_PIN>
+ --network-tester-serial-io-standard LVCMOS33
+These options also override OrangeCrab's default pairs with single-ended pins.
+Choose pins and an I/O standard appropriate to the board bank voltage.
+
+OrangeCrab also exposes traffic_generator_gmii_0.cycle_start as the single-ended
+tx1 output on B10 (LVCMOS33) in every mode, with or without SDRAM.
+
+OrangeCrab exposes traffic_generator_gmii_0.gmii_en as the single-ended tx2
+output on B9 (LVCMOS33) in every mode, with or without SDRAM.
+
+==One-frame test over the LiteX serial BIOS console==
+
+Requires Python 3 and pyserial. From systems/litex run:
+ python3 examples/serial_one_frame.py --verbose
+
+Defaults: /dev/ttyACM0, 115200 baud, and build/gsd_orangecrab/csr.csv.
+Use --csr-csv <path> matching the loaded bitstream; register addresses and
+CSR widths are read from that file. Supports 8/16/32-bit CSR data with 32-bit
+alignment and big CSR word ordering. CPU memory byte order defaults to little
+(VexRiscv); --cpu-byteorder big selects a big-endian CPU memory dump.
+Close other serial terminal programs before running. The BIOS must be at its
+litex> prompt. In serial_external mode, connect the TX/RX physical path first.
+For OrangeCrab's complementary CMOS pairs, connect N17 to B8 and M18 to C8
+when using an external cable loopback.
+
+The test stops the generator, clears/enables analyzer 0, writes a 72-byte
+static frame with valid preamble/SFD and FCS, sets total_frames=1, and starts
+it using mem_write commands. It verifies configuration readbacks and polls
+mem_read counters, accounting for the generator's existing packet count.
+PASS requires one transmitted and one received packet, zero bad CRC packets,
+and zero bad preamble packets. The generator is stopped on exit; analyzer
+counters remain available. Exit status: 0 PASS, 1 packet validation failure,
+2 serial/console/configuration error. --timeout controls packet polling;
+--command-timeout controls each BIOS reply. Command characters are paced at
+2 ms and each command waits for the next prompt; --char-delay adjusts pacing.
+
+The serial test always prints commands with [TX] and incoming replies with
+[RX] by default, including prompt synchronization and partial replies before
+a timeout. --verbose remains accepted for compatibility.
+
+==Continuous 64-octet traffic and live serial status==
+
+From systems/litex:
+ python3 examples/serial_continuous_traffic.py --quiet-console
+
+This uses the same pyserial dependency, port (/dev/ttyACM0), baud rate,
+csr.csv, and BIOS mem_write/mem_read transport as serial_one_frame.py.
+Close other serial terminal programs and provide a working GMII/internal
+serial/external physical loopback. The script clears/enables the analyzer,
+loads a static frame, and enables continuous generation with total_frames=0,
+frames_per_burst=0 and interframe_gap=20 (interburst_gap is also set to 20).
+A 64-octet Ethernet frame includes its 4-octet FCS and excludes preamble/SFD;
+the generator frame_size register is therefore 72 GMII octets. No timestamp
+or sequence-number insertion is enabled, so the static FCS remains valid.
+
+The status display shows elapsed monitoring time, TX/RX packet totals for
+this run, approximate host-timed packet rates, RX frame Mbit/s (64 octets per
+frame, excluding preamble/gap), CRC errors, preamble errors and reception
+state. Live counters are read with upper-limb verification/retry to avoid
+rollover artifacts. Counters are read sequentially over the serial console;
+TX/RX totals are not simultaneous snapshots or an exact packet-loss measure.
+Default logging includes every command and reply; --quiet-console leaves
+only configuration/status messages. --interval sets the pause between reads
+(default 1 second); serial command time adds to each monitoring interval.
+--duration 30 stops after 30 monitoring seconds, otherwise monitoring continues
+until Ctrl-C. Both cases stop the generator and retain analyzer counters.
+Serial/configuration failures also attempt to stop the generator before exit.
+
+==GateMate EVB 125 MHz reference-clock output on J8==
+
+The colognechip_gatemate_evb target now always exports serdes_refclk_out on
+IO_SB_A7 (P12), the GPIO/CLK1 pin connected to the optional J8 SMA path.
+A separate economy-mode CC_PLL generates 125 MHz from the board's 10 MHz
+oscillator. The system PLL and selected sys_clk_freq remain independent.
+The GPIO output uses the bank's existing 2.5 V supply and fast slew.
+
+For the documented EVB revisions 3.1/3.2, populate J8 and R67 (0 ohm) if
+missing, and bridge JP9 pins 2-3. This connects J8 to IO_SB_A7 and leaves
+oscillator X2 disconnected. Leave optional shunt resistor R65 unpopulated
+for this GPIO-driven output unless the output loading has been designed
+for it. The corresponding GPIO header pin must not be driven externally.
+
+Correction to earlier session discussion: J11 connects to SER_CLK_N/T13;
+J12 connects to SER_CLK/T12, the positive/single-ended reference input.
+For single-ended external clock feedback, connect J8 to J12, not J11.
+J12 must be populated. Leave the unused oscillator X3 path disconnected.
+Dedicated serdes mode selects PLL_REF_SEL=0. The other modes export the
+clock without instantiating CC_SERDES, and their scaled serial datapaths
+continue to use the existing clocks.
+
+Schematics: DS1003, pages 22, 33 and 34:
+ https://colognechip.com/docs/ds1003-gatemate1-evb-3v1-a1-schematics-latest.pdf
+ https://colognechip.com/docs/ds1003-gatemate1-evb-3v2-a1-schematics-latest.pdf
+
+Verified CRG elaboration and generated IO_SB_A7/SLEW=fast constraints with
+24/48 MHz system clocks in GMII and serial-loopback modes. Isolated Yosys
+synthesis passed and retained both the system PLL and 125 MHz output PLL.
+GateMate place-and-route, output frequency/jitter and SERDES lock require
+verification with the actual toolchain and hardware. In particular, generating
+125 MHz does not establish compliance with the SERDES reference-jitter limit.
+
+==GateMate dedicated SERDES: 125 MHz GMII / 1.25 Gbit/s 1000BASE-X==
+
+From systems/litex, with the normal LiteX environment/toolchain active:
+ python3 -m boards.targets.colognechip_gatemate_evb \
+   --toolchain peppercorn --cpu-type vexriscv --cpu-variant linux \
+   --bus-standard axi-lite --network-tester-mode serdes --build
+
+For near-end PMA loopback inside the physical transceiver, additionally use:
+ --network-tester-serdes-loopback
+
+The dedicated mode requires the J8 -> J12 reference-clock cable and board
+setup described above, even when using the internal PMA loopback. Without
+--network-tester-serdes-loopback, connect the dedicated SERDES pins to the
+external link. Board connectors are J16=TX+, J15=TX-, J14=RX+, J13=RX-;
+for a physical cable loopback, connect J16 -> J14 and J15 -> J13. Populate
+missing connectors and verify the board's reference-clock electrical/jitter
+requirements before use. Generic --network-tester-serial-*-pin arguments do
+not apply to this mode. No SFP-specific driver-swing preset is claimed.
+
+Path:
+ generator 0 (125 MHz GMII) -> existing TX PCS / 8b10b encoder -> TX gearbox
+ -> CC_SERDES (20-bit raw interface at 62.5 MHz) -> dedicated serial pair
+ -> hardware CDR / comma alignment -> RX gearbox -> parallel RX PCS
+ -> analyzer 0 (125 MHz recovered-clock GMII).
+
+The SERDES ADPLL uses the external 125 MHz clock: N1=1, N2=2, N3=5, M3=2
+produce a 625 MHz DDR bit clock for a 1.25 Gbit/s line. M1=10 and M4=1
+produce a 62.5 MHz 20-bit interface (PLL_MAIN_DIVSEL=25, PLL_OUT_DIVSEL=1,
+PLL_FCNTRL=26). TX/RX interface widths are 20 raw bits, native 8b10b is bypassed,
+and the FPGA retains the project's encoding/decoding. Raw TX data is repeated
+in all four 20-bit quarters of the native input bus, with DISPVAL providing
+bit 8 and DISPMODE bit 9 per symbol; RX delivers contiguous raw code groups.
+The raw bit order is reversed relative to the project's bit-9-first encoder.
+
+Each interface clock is divided by two to a 31.25 MHz reference; separate
+fabric PLLs then multiply by four to 125 MHz. This keeps their reference
+inputs below CC_PLL's specified 50 MHz ceiling. Including the system PLL and the J8 clock-output PLL, this uses all
+four fabric PLLs on the A1. With REGISTER_SYMBOL=1, the TX PCS registers
+the selected byte/K/idle marker, then uses nine lookup cycles. First-level
+banks have local copies of bits 0 and 1; later stages resolve the remaining
+address bits through registered decisions.
+Both disparity variants are precomputed; live running disparity selects the
+final result. Idle variant selection happens at the output so that it follows
+the preceding comma despite pipeline latency. PCS encoder latency is ten GMII
+cycles (80 ns at 125 MHz), with one symbol per cycle throughput. Lookup
+and tag payload registers are reset-free; local selector-flop copies serve
+banks of up to four lookup entries, without adding latency. Process-level
+keep attributes preserve the copies through synthesis. The validity chain masks
+them with a known comma until the pipeline has refilled, reducing reset fanout.
+TX also registers the encoder output and packs two
+consecutive symbols into a 20-bit register, with no TX gearbox RAM/FIFO. Its
+62.5 MHz word clock is divided directly from the 125 MHz GMII clock; words
+change on falling edges and the SERDES samples rising edges. The divider
+runs during datapath reset so the native TX reset sequence can complete.
+RX retains its asynchronous FIFO and prefill. The low-fanout
+SERDES half-rate clocks use local routing, with clkbuf_inhibit attributes,
+while fabric PLL outputs supply the main global clocks. The system clock and
+the previous modes keep their existing frequencies. RX packet processing
+resets on loss of native alignment and waits for PCS synchronization.
+External TX can start independently of RX; PMA-loopback TX waits for RX sync.
+
+This is forced-link 1000BASE-X, with no Clause 37 auto-negotiation controller.
+Configure the link partner accordingly. Hardware signal/clock conditioning
+and timing closure must be established on the actual board/toolchain.
+The time buses use coherent sys-to-GMII snapshot handshakes, rather than
+sampling fast GMII edges in the slower system clock domain. Timestamp values
+can lag the system counter and are not calibrated physical latency readings.
+Existing generator/analyzer CSR names/order and register programming apply.
+
+Validation status for this mode: 25 LiteX/serial regression tests passed,
+including digital CC_SERDES/CC_PLL interface models at 125 MHz, valid-FCS
+packet reception with 8/32-bit CSRs, ordered control writes, and loss of RX
+alignment followed by reset/retraining. The final 31.25 MHz-reference PLL
+revision also passed both dedicated-mode tests. These models validate digital
+interfaces only; they do not model analog CDR, PLL jitter or SFP eye compliance.
+
+Full SoC gateware generation and Yosys synthesis succeeded. With the installed
+OSS CAD Suite, nextpnr router2 failed routing a logic net; a router1/seed-2
+retry advanced too slowly and was interrupted. No routed bitstream or 125 MHz
+timing closure is claimed. Build logs are /tmp/gatemate-serdes-final-build.log
+and /tmp/gatemate-serdes-route1.log. The tested synthesis/routing configuration
+used a standard VexRiscv and 32 KiB integrated main RAM; Linux/HyperRAM builds
+may require additional routing/timing work. The installed timing model defaults
+to SPEED and warns about the existing ECONOMY PLL configuration; match the
+actual board supply/performance mode when validating timing. Hardware operation
+has not been tested and the FPGA has not been programmed.
+
+==Smaller CPU configuration for SERDES bring-up==
+
+The CPU only runs the BIOS/CSR control plane; packet generation and reception
+remain autonomous 125 MHz hardware. A PicoRV32 minimal configuration, a single
+Wishbone CPU bus and internal RAM reduce routing pressure:
+
+ python3 -m boards.targets.colognechip_gatemate_evb \
+   --toolchain peppercorn --cpu-type picorv32 --cpu-variant minimal \
+   --bus-standard wishbone \
+   --integrated-rom-size 0x10000 --integrated-sram-size 0x2000 \
+   --integrated-main-ram-size 0x8000 \
+   --network-tester-mode serdes --network-tester-serdes-loopback \
+   --output-dir build/colognechip_gatemate_evb_picorv32 \
+   --csr-csv build/colognechip_gatemate_evb_picorv32/csr.csv --build
+
+Remove --network-tester-serdes-loopback to use an external serial link.
+Use this configuration's generated csr.csv with the serial Python tests.
+The 32 KiB internal main RAM avoids the HyperRAM controller; the BIOS needs
+about 25.5 KiB ROM and 2.8 KiB SRAM in the tested environment. This CPU runs
+bare-metal firmware, not Linux. This profile does not change the target defaults.
+
+With compiled BIOS, source generation, Yosys synthesis and nextpnr packing
+succeeded. Packed LT usage was 22,434/40,960 (54%) and FF usage 7,113/40,960
+(17%), versus 26,424 (64%) and 8,262 (20%) for the prior VexRiscv standard/AXI
+bring-up configuration. This compares complete build configurations, not just
+CPU implementations; bus and memory/firmware configurations also differ.
+All four PLLs remain used, and the 125 MHz datapath timing still needs checking.
+
+Transmit-only dedicated SERDES mode (GateMate)
+--------------------------------------------
+Use --network-tester-mode serdes_tx to instantiate only the traffic generator
+and the 125 MHz GMII / 1.25 Gbit/s SERDES transmit path. No traffic analyzer,
+receive PCS, RX gearbox, recovered-clock PLL, or RX clock domains are instantiated;
+the hard SERDES receiver is powered down. Generator CSR names are unchanged;
+analyzer CSRs are absent. This mode uses three fabric PLLs including the system
+clock and J8 reference output. The external J8-to-J12 reference-clock connection
+is still required. --network-tester-serdes-loopback is unavailable in this mode.
+
+Example with a small processor and internal RAM:
+
+    python3 -m boards.targets.colognechip_gatemate_evb \
+        --toolchain peppercorn --cpu-type picorv32 --cpu-variant minimal \
+        --bus-standard wishbone --integrated-rom-size 0x10000 \
+        --integrated-sram-size 0x2000 --integrated-main-ram-size 0x8000 \
+        --network-tester-mode serdes_tx \
+        --output-dir build/colognechip_gatemate_evb_serdes_tx \
+        --csr-csv build/colognechip_gatemate_evb_serdes_tx/csr.csv --build
+
+Dummy PCS transmit mode (GateMate)
+---------------------------------
+Use --network-tester-mode serdes_dummy_pcs_tx for the generator and dedicated
+SERDES TX path without the 1000BASE-X PCS or 8b/10b encoder. Each GMII byte
+becomes {2'b00, gmii_data[7:0]}. The native SERDES sends bits 0 through 9,
+i.e. the byte least-significant bit first, followed by two zero bits. Every
+GMII cycle produces a symbol, including idle cycles; gmii_en and gmii_er
+are ignored. This raw test stream is not valid 1000BASE-X.
+
+The register TX gearbox, 125 MHz GMII clock, 62.5 MHz word clock and
+1.25 Gbit/s dedicated transmitter remain. No analyzer or RX logic is
+instantiated, and the hardware receiver stays powered down. Generator CSRs
+are unchanged. The J8-to-J12 reference clock connection is still required;
+PMA loopback and serial GPIO pin options are unavailable in this mode.
+
+    python3 -m boards.targets.colognechip_gatemate_evb \
+        --toolchain peppercorn --cpu-type picorv32 --cpu-variant minimal \
+        --bus-standard wishbone --integrated-rom-size 0x10000 \
+        --integrated-sram-size 0x2000 --integrated-main-ram-size 0x8000 \
+        --network-tester-mode serdes_dummy_pcs_tx \
+        --output-dir build/colognechip_gatemate_evb_dummy_pcs_tx \
+        --csr-csv build/colognechip_gatemate_evb_dummy_pcs_tx/csr.csv --build
+
+Control CSR crossing queue timing
+--------------------------------
+The 16-entry control queues use registered binary RAM addresses and Gray
+pointers synchronized between sys and the datapath clock. Full/empty flags
+are registered separately. The RAM read output is latched (READ_FIRST),
+with a matching valid bit, so the slot can safely be reused after its read.
+No synchronized pointer, empty comparison, or next-address increment logic
+feeds the RAM read-address input directly. Once data is available, queued
+writes drain at one control update per datapath cycle. Overflow remains
+sticky until system reset; datapath reset discards queued commands and
+restores the current CSR value, as before.
+
+Fixed 64/20 frame transmit mode (GateMate)
+---------------------------------------
+Use --network-tester-mode serdes_64data_20gap_tx for the CSR-free
+traffic_generator_64data_20gap_gmii core feeding the same 1000BASE-X PCS,
+8b/10b encoder, register gearbox and dedicated transmitter as serdes_tx.
+It runs at 125 MHz GMII / 1.25 Gbit/s serial. No configurable traffic core,
+control FIFO, analyzer, timestamp crossings or rtclock is instantiated.
+The fixed generator starts automatically once the TX path is ready, with
+one startup idle cycle to prime its inferred block ROM. It emits
+8 preamble/SFD octets, a 64-octet frame including FCS, then 12 idle clocks:
+84 GMII clocks per frame. No traffic CSR writes are needed or available.
+The J8-to-J12 reference-clock connection remains necessary.
+
+    python3 -m boards.targets.colognechip_gatemate_evb \
+        --toolchain peppercorn --cpu-type picorv32 --cpu-variant minimal \
+        --bus-standard wishbone --integrated-rom-size 0x10000 \
+        --integrated-sram-size 0x2000 --integrated-main-ram-size 0x8000 \
+        --network-tester-mode serdes_64data_20gap_tx \
+        --output-dir build/colognechip_gatemate_evb_64data_20gap_tx \
+        --csr-csv build/colognechip_gatemate_evb_64data_20gap_tx/csr.csv --build --no-compile-gateware
+
+For the validated PCS-symbol register / local-copy implementation, synthesize
+and route with the following settings after generating the above build:
+
+    cd build/colognechip_gatemate_evb_64data_20gap_tx/gateware
+    yosys -Q -l colognechip_gatemate_evb.rpt colognechip_gatemate_evb.ys
+    nextpnr-himbaechel --json colognechip_gatemate_evb.json \
+        --device CCGM1A1 --vopt ccf=colognechip_gatemate_evb.ccf \
+        --vopt out=colognechip_gatemate_evb.txt --router router2 \
+        --seed 3 --freq 125 --timing-allow-fail \
+        --placer-heap-timingweight 40 --tmg-ripup \
+        --log timing.log --report timing.json
+    gmpack colognechip_gatemate_evb.txt colognechip_gatemate_evb.bit
+
+The recorded FINAL routed result was 128.52 MHz for GMII (required 125 MHz)
+and 28.24 MHz for sys (required 24 MHz). The default routing settings did not
+close timing. Check the final routed report before using the bitstream;
+--timing-allow-fail permits completion even when timing fails. The result uses
+nextpnr's SPEED/WORST model, with the existing PLL ECONOMY/SPEED mismatch
+warnings. Tool settings and board performance configuration matter.
+The input netlist, constraints, reports and passing bitstream are archived
+under codex/reports/pcs-symbol-register at the project root.
+
+
+GateMate console through the onboard USB connector
+-------------------------------------------------
+Add --console jtag to the GateMate build command to use the onboard USB
+JTAG connection for the LiteX console. The default --console pmod retains
+the existing external USB-UART adapter on PMODB. A normal /dev/ttyUSB port
+is not the console for the JTAG build. No EEPROM changes are required.
+
+GateMate has no native LiteX JTAGPHY backend. This build reclaims the WA
+configuration pins after loading and implements a fabric TAP, with a
+6-bit instruction register, IDCODE 0x20000001, USER instruction 0x02 and
+LiteX's ten-bit console stream framing. Configuration status pins are
+held at their successful-load levels while the fabric is running.
+The pin mapping follows the GateMate EVB 3.2/A1 schematic:
+https://colognechip.com/docs/ds1003-gatemate1-evb-3v2-a1-schematics-latest.pdf
+The host clock is limited to 1 MHz. Runtime configuration instructions
+are unavailable in the fabric TAP; openFPGALoader asserts configuration
+reset before loading, restoring the hard configuration TAP. Close the
+console before programming because both tools use FT2232 channel A.
+
+Generate a separate build so the previously validated bitstream is kept:
+
+    python3 -m boards.targets.colognechip_gatemate_evb \
+        --toolchain peppercorn --cpu-type picorv32 --cpu-variant minimal \
+        --bus-standard wishbone --integrated-rom-size 0x10000 \
+        --integrated-sram-size 0x2000 --integrated-main-ram-size 0x8000 \
+        --network-tester-mode serdes_64data_20gap_tx --console jtag \
+        --output-dir build/colognechip_gatemate_evb_jtag \
+        --csr-csv build/colognechip_gatemate_evb_jtag/csr.csv \
+        --build --no-compile-gateware
+
+For this console version, use the following validated routing settings
+(seed 2, default placement timing weight, timing-driven rip-up):
+
+    cd build/colognechip_gatemate_evb_jtag/gateware
+    yosys -Q -l synthesis.log colognechip_gatemate_evb.ys
+    nextpnr-himbaechel --json colognechip_gatemate_evb.json \
+        --device CCGM1A1 --vopt ccf=colognechip_gatemate_evb.ccf \
+        --vopt out=colognechip_gatemate_evb.txt --router router2 \
+        --seed 2 --freq 125 --tmg-ripup --timing-allow-fail \
+        --sdc ../../../prog/gatemate_console.sdc \
+        --log timing.log --report timing.json
+    gmpack colognechip_gatemate_evb.txt colognechip_gatemate_evb.bit
+
+FINAL routed timing: GMII 126.49 MHz PASS125, sys 26.34 MHz PASS24,
+JTAG 44.04 MHz PASS1. The half-rate clock is conservatively checked at the
+125 MHz global default, as in the earlier PMODB-console run. These settings
+apply to this netlist; the prior 128.52 MHz result belongs to the PMODB build.
+Check the final report: --timing-allow-fail does not establish timing closure.
+Existing PLL ECONOMY/SPEED warnings remain; the model is SPEED/WORST.
+
+The JTAG target automatically includes prog/gatemate_console.sdc in the
+generated Peppercorn build script, so TCK is checked at the host's 1 MHz.
+Manual nextpnr invocations must include it too. No traffic clock was lowered.
+All 33 LiteX tests passed. The final bitstream was loaded on the EVB 3.2A
+and Enter/help were tested using the actual litex_term command. Reports,
+reproduction inputs, hardware logs and bitstream: codex/reports/jtag-console.
+
+From systems/litex, program the new bitstream and connect:
+
+    openFPGALoader -b gatemate_evb_jtag \
+        build/colognechip_gatemate_evb_jtag/gateware/colognechip_gatemate_evb.bit
+    litex_term jtag --jtag-config prog/openocd_gatemate_console.cfg
+
+OpenOCD must be on PATH. The supplied configuration normalizes multi-field
+drscan whitespace for compatibility with this LiteX/OpenOCD combination.
+Press Enter for the BIOS prompt. --speed is not
+needed: JTAG transfer speed is set by adapter speed in the OpenOCD config.
+The generator still requires the J8-to-J12 reference-clock cable.
+
+
+Versa ECP5: internally clocked 1000BASE-X on the SMA pairs
+-------------------------------------------------------
+Requires LiteICLink alongside the standard LiteX/Trellis tools.
+The lattice_versa_ecp5 target supports the dedicated SERDES modes on the
+LFE5UM and LFE5UM5G devices. The default system clock remains 75 MHz and
+the normal board UART remains enabled; no JTAG console is added.
+An additional PLL output derives the 125 MHz SERDES reference from the
+onboard 100 MHz LVDS oscillator. No external reference-clock cable is needed.
+The DCU PLL uses 125 MHz x20 /2 for a 1.25 Gbit/s serial line rate. The DCU
+runs its native 10-bit interface at 125 MHz, with its 1:2 gearing disabled;
+there is no fabric gearbox or RX elastic FIFO in this wrapper. The ECP5
+RX selects REGISTER_DECODE=1 in the shared parallel PCS. Its RD-independent
+8b/10b lookup uses one synchronous block ROM, with the code/valid tag delayed
+to match. This adds one 125 MHz cycle of receive latency while preserving
+one code group per cycle. The existing combinational decoder remains the
+default for other targets. Regenerate/check the table with
+python3 examples/generate_8b10b_rx_rom.py [--check].
+
+The existing platform resources select DCU0 channel 1:
+
+    Direction   Resource   SMA       FPGA ball
+    TX positive sma_tx.p   J7        W8
+    TX negative sma_tx.n   J8        W9
+    RX positive sma_rx.p   J5        Y7
+    RX negative sma_rx.n   J6        Y8
+
+For an external electrical loopback use two suitable SMA cables: J7 to J5,
+and J8 to J6. These are differential serial-data pairs. In particular J8
+is TX negative on the Versa board. The PCIe channel is not used.
+
+The new serdes_64data_20gap mode combines the fixed 64-octet generator with
+traffic_analyzer_gmii_0 on RX. The generator starts automatically after the
+local TX PLL is ready. The analyzer is enabled by default and exposes its
+usual CSR counters and capture registers. Its frame_size reports 72 for
+this stream because that register includes eight preamble/SFD octets;
+the Ethernet frame including FCS remains 64 octets. The 20-cycle interval
+contains eight preamble/SFD octets and twelve idle octets.
+
+TX starts and continues with RX disconnected. RX loss asserts the analyzer
+reset and RX re-acquires when the signal returns; statistics restart on RX
+reset. The RT clock core runs on the 125 MHz TX clock, preserving its 8 ns
+tick, with coherent snapshots into the recovered RX clock domain. CSR
+access and the CPU remain on the system clock.
+
+Other supported modes retain the shared meanings:
+- serdes: CSR-configurable generator plus RX analyzer.
+- serdes_tx: CSR-configurable generator, TX only.
+- serdes_64data_20gap_tx: fixed generator, TX only.
+- serdes_dummy_pcs_tx: raw diagnostic TX pattern.
+The ECP5 wrapper does not implement --network-tester-serdes-loopback;
+use the external SMA cables for loopback instead. As with the GateMate
+wrapper, the PCS uses forced-link 1000BASE-X without auto-negotiation.
+
+Build the fixed generator plus RX analyzer from systems/litex:
+
+    python3 -m boards.targets.lattice_versa_ecp5 \
+        --toolchain trellis --device LFE5UM5G \
+        --cpu-type picorv32 --cpu-variant minimal --bus-standard wishbone \
+        --integrated-rom-size 0x10000 --integrated-sram-size 0x2000 \
+        --integrated-main-ram-size 0x8000 \
+        --network-tester-mode serdes_64data_20gap \
+        --output-dir build/lattice_versa_ecp5_1000basex \
+        --csr-csv build/lattice_versa_ecp5_1000basex/csr.csv \
+        --build --no-compile-gateware
+
+Then synthesize and route with the validated placement region:
+
+    cd build/lattice_versa_ecp5_1000basex/gateware
+    yosys -Q -l synthesis.log lattice_versa_ecp5.ys
+    nextpnr-ecp5 --json lattice_versa_ecp5.json --lpf lattice_versa_ecp5.lpf \
+        --textcfg lattice_versa_ecp5.config --um5g-45k --package CABGA381 \
+        --speed 8 --seed 1 --router router1 --timing-allow-fail \
+        --pre-place ../../../prog/versa_ecp5_sequence_region.py \
+        --log timing.log --report timing.json
+    ecppack --bootaddr 0 lattice_versa_ecp5.config \
+        --svf lattice_versa_ecp5.svf --bit lattice_versa_ecp5.bit
+
+HARDWARE VALIDATION CORRECTION (2026-11-09): the earlier archived design
+had an empty CPU boot ROM after gateware regeneration with
+--no-compile-software. It cannot boot the BIOS. Always compile software as
+in the command above, or provide --integrated-rom-init <matching bios.bin>
+when skipping software compilation. Verify the generated *_rom.init is
+nonempty before synthesis. The previously reported timing below applies
+to that incomplete netlist and must be revalidated with BIOS included.
+
+The FINAL post-route result for this LFE5UM5G-45F-8 configuration is:
+RX 132.82 MHz PASS125, TX 220.31 MHz PASS125, system 83.55 MHz PASS75.
+The placement region keeps 526 sequence-comparison and error-counter cells
+near one another; the analyzer Verilog is unchanged. Default unconstrained
+placement missed RX timing, so the region is part of this validated recipe.
+The earlier placement estimate failed; only the final routed report passes.
+--timing-allow-fail permits completion and does not establish timing closure.
+For LFE5UM, use --device LFE5UM and --um-45k; that variant needs its own
+routing/timing validation. Other network-tester modes also need separate
+physical timing validation. The bitstream has not been tested on hardware.
+Inputs, final reports, CSR map, bitstream and SVF are archived under
+codex/reports/versa-1000basex at the project root.
+
+Use --network-tester-mode serdes for a configurable generator instead.
+Use the generated csr.csv addresses for crg_traffic_analyzer_gmii_0_pkts,
+crg_traffic_analyzer_gmii_0_bad_crc_pkts and other analyzer registers.
+The normal console is litex_term <board-UART-device> --speed 115200.
+
+Implementation references: LiteICLink serdes_ecp5.py supplies the DCUA
+analog/electrical parameter profile; this project supplies initialization,
+raw 10-bit datapaths and its existing Verilog TX/RX PCS. LiteX-Boards'
+lattice_versa_ecp5 platform supplies the SMA constraints. The digital
+simulation tests cover frames/CRC, absent RX, clock loss/recovery and the
+125 MHz timestamp tick; they do not model analog CDR, jitter or eye quality.
+
+
+GateMate full-receive ROM/placement experiment
+--------------------------------------------
+The native GateMate receive path now enables the registered 8b/10b block-ROM
+decoder described above. It maps to one CC_BRAM_20K and adds one RX cycle.
+40 LiteX tests passed, including CRC/frame reception, alignment recovery,
+and both native CSR bus widths. The TX-only path is unchanged.
+
+Full TX/RX uses all four PLL sites. With --console jtag, the 1 MHz TAP clock
+is routed in fabric to avoid a fifth PLL-backed global clock buffer. The
+existing transmit-only JTAG clock-buffer configuration is unchanged.
+
+The tested mode was serdes_64data_20gap, at the existing 24 MHz system clock
+and125 MHz GMII. Baseline, sequence-region and CP-clock-routing attempts
+all failed routing. NO timing-closed full-receive image has been generated.
+Placement estimates in those logs must not be read as final routed timing.
+The experimental script and exact failing-run inputs/reports are under
+codex/reports/gatemate-rx-rom. The analyzer Verilog is unchanged.
+Keep using the separately validated serdes_64data_20gap_tx build for the
+currently proven GateMate transmitter; the Versa full-duplex build has its
+own validated132.82 MHz RX result. No board was programmed for this experiment.
+
+
+Versa generator monitor outputs on X3
+------------------------------------
+
+Configurable or fixed GMII generator instance 0 drives these complementary
+3.3 V output pairs (no monitor outputs in PRBS mode):
+
+    Signal        X3 positive   X3 negative   FPGA positive / negative
+    cycle_start   pin 7         pin 8         E6 / D6 (PT6A / PT6B)
+    gmii_en       pin 9         pin 10        E7 / D7 (PT9A / PT9B)
+
+Both use LVCMOS33D, DRIVE=12 and SLEWRATE=FAST. Trellis configures each
+pair through its A pad; the B pad is driven automatically and must not
+receive a separate top-level output buffer.
+
+For the discussed Tektronix 11801B trigger connection, use ONLY the positive
+output through an external 330 ohm series resistor near the header, then
+50 ohm coax into the scope's 50 ohm direct trigger input. Connect board
+ground to the coax shield and leave the negative output unconnected. Select
+x1, DC coupling and a trigger level around 0.2 V. The resistor is external
+and required; FPGA constraints do not provide attenuation.
+
+Validation: generated the full serdes_64data_20gap SoC and checked monitor
+connections, pin/drive constraints and nonempty BIOS initialization. A
+separate minimal design using the same two pairs routed successfully; its
+configuration sets both A/B drivers to 12 mA. The full routed result is
+recorded below. The timing-passing image has now been programmed; see below.
+
+
+Versa full monitor-output build: final routed result (2026-11-09)
+--------------------------------------------------------------
+
+The BIOS-inclusive serdes_64data_20gap design with cycle_start on X3:7/8 and
+gmii_en on X3:9/10 routed and packed successfully. Final RX131.03 MHz PASS125,
+TX218.29 MHz PASS125, SYS93.05 MHz PASS75.0075. All timing.json clocks pass.
+Use the current prog/versa_ecp5_sequence_region.py: rectangle (20,35)-(45,70),
+687 cells in this build, seed1/router1/speed8. BIOS initialization was verified
+in mapped ROM BRAMs. Both bitstream and SVF are saved with all implementation
+inputs and reports at codex/reports/versa-monitors-routed. This supersedes
+the earlier zero-ROM timing result and the 122.17 MHz boot diagnostic.
+The new image was programmed over USB JTAG on 2026-11-09. UART boot,
+RAM test and LiteX prompt passed. Monitor waveforms and packet reception
+have not yet been verified with this image. Flash was not programmed.
+
+
+Versa SERDES diagnostic status register
+--------------------------------------
+
+Dedicated SERDES modes now expose the read-only 32-bit serdes_status CSR
+in a separate system-clock bank. In the generated 32-bit-CSR fixed64/20
+configuration it is at 0x82004000:
+
+    mem_read 0x82004000 4  # serdes_status (NEW image only)
+
+    Bit  Field                 Meaning when 1
+     0   ref_pll_locked         Fabric reference-clock PLL locked
+     1   tx_pll_locked          DCU TX PLL locked (inverted PLOL)
+     2   rx_cdr_locked          DCU RX CDR locked (inverted RLOL)
+     3   rx_signal_detected     DCU does not report loss of signal
+     4   tx_ready               TX initialization settled
+     5   rx_ready               RX initialization settled
+     6   cdr_ready              Filtered CDR-ready condition used by PCS
+     7   pcs_synced             PCS has code-group synchronization
+     8   tx_reset               TX GMII datapath reset asserted
+     9   rx_pcs_reset           RX PCS reset asserted
+    10   rx_mac_reset           RX analyzer/MAC reset asserted
+    11   serdes_reset           DCU startup reset asserted
+    12   tx_clock_active        Recent TX clock activity
+    13   rx_clock_active        Recent RX clock activity
+    14   rx_enabled             Receive logic instantiated
+ 15-31   reserved              Zero
+
+All asynchronous flags are synchronized into sys. Clock-activity dividers
+continue during datapath reset; flags expire after 4095 sys-clock cycles
+without a synchronized transition (about 54.6 us at 75 MHz). These flags
+indicate activity, not clock frequency or jitter. They recover when clocks
+restart. In TX-only builds RX lock/ready/activity flags are zero, RX resets
+are one and rx_enabled is zero. A healthy full link normally reads 0x70ff.
+
+The BIOS and CSR map must match the new image: adding the diagnostic bank
+moves timer0 to 0x82005000 and UART to 0x82006000 in this configuration.
+Analyzer addresses stay unchanged. Use that build's generated csr.csv.
+The original monitor-only image predates this CSR and maps timer0 at
+0x82004000 instead. The currently programmed corrected status image uses
+the new map; hardware validation is recorded below.
+
+Validation includes every status bit, activity during reset, stopped RX
+clock detection, clock restart, and TX-only elaboration without RX clocks.
+
+
+Versa status-register routing result (2026-11-09)
+----------------------------------------------
+
+The full status-register design routed with both seeds1 and2 using router1,
+speed8 and the current expanded sequence region. Final seed1 RX121.94 MHz
+FAIL125; TX233.75 PASS125; SYS83.09 PASS75.0075. Best seed2 RX123.33 MHz
+FAIL125; TX217.34 PASS125; SYS86.28 PASS75.0075. Both also pass board100 MHz.
+No frequencies relaxed. Synthesis structural check0 issues, initialized BIOS
+verified and BIT/SVF generated. This new status-register build is not timing
+closed and has not been programmed. The board still has the previous passing
+monitor image, which lacks serdes_status. Full implementation inputs, matching
+BIOS/CSR map, selected seed2 BIT/SVF and both timing reports are archived in
+codex/reports/versa-serdes-status.
+
+
+Versa corrected status readback and hardware lock (2026-11-09)
+-----------------------------------------------------------
+
+The initial status build had a CSR wiring error: declaring fields while
+driving the packed status signal let LiteX override it with undriven fields.
+It returned zero even for constant rx_enabled. Corrected by driving fields
+individually; regression now includes finalized CSR wiring and CPU read word.
+All6 ECP5 tests pass. Rebuilt with identical CSR addresses and explicit
+matching BIOS. Final routed RX127.37 PASS125, TX179.05 PASS125,
+SYS87.56 PASS75.0075; seed2/router1/current expanded region.
+
+Programmed corrected image, verified BIOS/RAM test/prompt. Five reads of
+serdes_status all0x747f: reference PLL, TX PLL, RX CDR locked; signal present;
+TX/RX ready and both clocks active. PCS synchronization remains0, so RX MAC
+and analyzer are held in reset(bit10=1). The clock lock check passes, but
+packet reception remains unresolved at PCS synchronization. Current board
+image is archived in codex/reports/versa-serdes-status-fixed with mapped
+inputs, BIOS/CSR map, timing, bitstream/SVF and hardware transcripts.
+
+
+Versa channel rate correction and measured clocks (2026-11-09)
+-----------------------------------------------------------
+
+The user's approximately336ns gmii_en period suggested250MHz GMII. The
+20x125MHz DCU profile was missing explicit per-channel half-rate selection,
+despite /2 divider attributes. Set both TX/RX RATE_MODE parameters and
+FFC_RATE_MODE controls to1. No generator pattern changes. Added read-only
+serdes_tx_clock_count at0x82004004 and serdes_rx_clock_count at0x82004008;
+existing serdes_status remains0x82004000. Counts measure edges per65536
+syscycles with resetless Gray counters, independent of PCS/datapath reset.
+
+    mem_read 0x82004000 4  # serdes_status
+    mem_read 0x82004004 4  # serdes_tx_clock_count
+    mem_read 0x82004008 4  # serdes_rx_clock_count
+
+FrequencyHz=count*sys_clk_freq/65536. Wait a complete window after reset.
+At75MHz sys, expected count109226/109227 for125MHz,218453/218454 for250MHz.
+Hardware after programming: five TX/RX samples109226/109227, approximately
+125.000MHz. Expected gmii_en period672ns (high576ns/low96ns); external scope
+confirmation pending. Status0x747f unchanged: clockslocked, but PCSsync0 and
+analyzerheldreset. No received packets. Six tests pass, including clock-rate
+measurement and672ns digital-model period. Final RX130.50PASS125,
+TX177.78PASS125, SYS83.46PASS75.0075. Current programmed image and matching
+artifacts/transcripts: codex/reports/versa-rate-fix. Flash unchanged.
+
+
+Versa TX clock diagnosis (2026-11-10)
+----------------------------------
+
+TX interface now uses the internal125MHz reference with the DCU phase FIFO
+enabled. Raw DCU TX_PCLK remains separately monitored: statusbit15 and
+serdes_tx_pclk_clock_count at0x8200400c. Manual reset and SCI debug CSRs
+follow it; use the matching csr.csv. Seven targeted tests pass, including
+TX with the DCU output clock stopped. All routed timing constraints pass.
+
+Hardware TX interface125MHz/reset released, but rawTXPCLK remains stopped.
+Expected gmii_en period672ns; scope confirmation pending. Internal serial
+loopback fails PCS sync/packet reception, so serial TX remains unresolved.
+External RX restored and receives with zero CRC/preamble errors. SRAM image,
+matching CSR map, reports, scripts and transcripts: codex/reports/versa-tx-refclk.
+
+
+Versa TX serializer synchronization fix (2026-11-10)
+--------------------------------------------------
+
+Explicitly enable D_SYNC_LOCAL_EN=0b1 in the project DCUA wrapper. Leaving
+local serializer synchronization disabled allowed TX PLL lock and its SMA
+clock-test output, while TX_PCLK and normal serial data remained flat.
+CH1_TX_CM_SEL=0b01 also explicitly enables the 0.6V common-mode setting.
+The imported LiteICLink profile itself is unchanged.
+
+Hardware now measures raw DCU TX_PCLK125MHz; user confirms normal SMA
+output transitions. Internal serial TX-to-RX loopback achieves PCS sync:
+packet counter1158596->3518467 with zero CRC/preamble errors. Afterwards
+loopback disabled, normal serial DATA selected, externalRXrecovered with
+zero CRC/preamble errors. TX fabric retains the internal125MHzreference.
+
+Current SRAM image:codex/reports/versa-tx-sync/lattice_versa_ecp5.svf.
+It reuses the timing-passing versa-tx-refclk routing, changing only two DCU
+configuration words (commonmode andlocalsync), then repacking. Matching
+CSR/BIOS/timing/config/logs archived alongside. Source fixes are included
+in subsequent normal builds. Physical SMA TX-to-RX cable test remains.
+
+Physical SMA cable loopback subsequently verified: internal loopbackOFF,
+PCSsync1, TX/RX125MHz, +4262278receivedpackets, zeroCRC/preambleerrors.
+Matching transcript and JSON:codex/reports/versa-tx-sync/versa-sma-loopback-*.

@@ -1,12 +1,13 @@
 `timescale 1ns/1ps
-`include "traffic_analyzer_gmii_cpu_regs.v"
+//`include "traffic_analyzer_gmii_cpu_regs.v"
 `include "traffic_analyzer_gmii_cpu_regs_defines.v"
-`include "ethernet_crc_8_check.v"
+//`include "ethernet_crc_8_check.v"
 
 `define C_GMII_DATA_WIDTH 8
 
 module traffic_analyzer_gmii
        #(
+           parameter C_USE_LITEX_CSR       = 0,
            parameter C_S_AXI_DATA_WIDTH    = 32,
            parameter C_S_AXI_ADDR_WIDTH    = 12,
            parameter C_BASEADDR            = 32'h00000000,
@@ -24,6 +25,40 @@ module traffic_analyzer_gmii
 
            input [47:0] sec,
            input [29:0] nsec,
+
+    // Native LiteX register connection; synchronous to clk.
+    input [31:0] csr_flip,
+    input [31:0] csr_control,
+    input [319:0] csr_testframe_filter_data,
+    input [319:0] csr_testframe_filter_mask,
+    input [C_FRAME_BUF_ADDRESS_WIDTH-1:0] csr_frame_buf_address,
+    output [31:0] csr_frame_buf,
+    output [31:0] csr_flip_read,
+    output [31:0] csr_id,
+    output [31:0] csr_version,
+    output [63:0] csr_pkts,
+    output [63:0] csr_octets,
+    output [63:0] csr_octets_idle,
+    output [63:0] csr_timestamp_sec,
+    output [31:0] csr_timestamp_nsec,
+    output [31:0] csr_frame_size,
+    output [63:0] csr_bad_crc_pkts,
+    output [63:0] csr_bad_crc_octets,
+    output [63:0] csr_bad_preamble_pkts,
+    output [63:0] csr_bad_preamble_octets,
+    output [63:0] csr_octets_total,
+    output [63:0] csr_testframe_pkts,
+    output [63:0] csr_sequence_errors,
+    output [63:0] csr_latency_min_sec,
+    output [31:0] csr_latency_min_nsec,
+    output [63:0] csr_latency_max_sec,
+    output [31:0] csr_latency_max_nsec,
+    output [63:0] csr_latency_sec,
+    output [31:0] csr_latency_nsec,
+    output [63:0] csr_last_sequence_error_expected,
+    output [63:0] csr_last_sequence_error_received,
+    output [63:0] csr_last_sequence_error_timestamp_sec,
+    output [31:0] csr_last_sequence_error_timestamp_nsec,
 
            // Slave AXI Ports
            input                                     S_AXI_ACLK,
@@ -144,6 +179,48 @@ integer sequence_errors_delta;
 
 
 //Registers section
+assign csr_id = id_reg;
+assign csr_version = version_reg;
+assign csr_pkts = pkts_reg;
+assign csr_octets = octets_reg;
+assign csr_octets_idle = octets_idle_reg;
+assign csr_timestamp_sec = timestamp_sec_reg;
+assign csr_timestamp_nsec = timestamp_nsec_reg;
+assign csr_frame_size = frame_size_reg;
+assign csr_bad_crc_pkts = bad_crc_pkts_reg;
+assign csr_bad_crc_octets = bad_crc_octets_reg;
+assign csr_bad_preamble_pkts = bad_preamble_pkts_reg;
+assign csr_bad_preamble_octets = bad_preamble_octets_reg;
+assign csr_octets_total = octets_total_reg;
+assign csr_testframe_pkts = testframe_pkts_reg;
+assign csr_sequence_errors = sequence_errors_reg;
+assign csr_latency_min_sec = latency_min_sec_reg;
+assign csr_latency_min_nsec = latency_min_nsec_reg;
+assign csr_latency_max_sec = latency_max_sec_reg;
+assign csr_latency_max_nsec = latency_max_nsec_reg;
+assign csr_latency_sec = latency_sec_reg;
+assign csr_latency_nsec = latency_nsec_reg;
+assign csr_last_sequence_error_expected = last_sequence_error_expected_reg;
+assign csr_last_sequence_error_received = last_sequence_error_received_reg;
+assign csr_last_sequence_error_timestamp_sec = last_sequence_error_timestamp_sec_reg;
+assign csr_last_sequence_error_timestamp_nsec = last_sequence_error_timestamp_nsec_reg;
+assign csr_flip_read = ip2cpu_flip_reg;
+assign csr_frame_buf = frame_buf_out_data;
+generate if (C_USE_LITEX_CSR) begin : litex_regs
+    assign cpu2ip_flip_reg = csr_flip;
+    assign control_reg = csr_control;
+    assign testframe_filter_data = csr_testframe_filter_data;
+    assign testframe_filter_mask = csr_testframe_filter_mask;
+    assign frame_buf_out_address = csr_frame_buf_address;
+    assign S_AXI_AWREADY = 1'b0;
+    assign S_AXI_WREADY = 1'b0;
+    assign S_AXI_BVALID = 1'b0;
+    assign S_AXI_BRESP = 2'b00;
+    assign S_AXI_ARREADY = 1'b0;
+    assign S_AXI_RVALID = 1'b0;
+    assign S_AXI_RRESP = 2'b00;
+    assign S_AXI_RDATA = 0;
+end else begin : axi_regs
 traffic_analyzer_gmii_cpu_regs
     #(
         .C_S_AXI_DATA_WIDTH (C_S_AXI_DATA_WIDTH),
@@ -218,6 +295,8 @@ traffic_analyzer_gmii_cpu_regs
         .last_sequence_error_timestamp_sec_reg(last_sequence_error_timestamp_sec_reg),
         .last_sequence_error_timestamp_nsec_reg(last_sequence_error_timestamp_nsec_reg)
     );
+
+end endgenerate
 
 bram_io #(
             .DATA_WIDTH(32),

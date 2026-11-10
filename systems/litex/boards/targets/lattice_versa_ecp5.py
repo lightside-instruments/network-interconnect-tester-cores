@@ -3,14 +3,15 @@
 #
 # This file is part of LiteX-Boards.
 #
-# Copyright (c) 2018-2019 Florent Kermarrec <florent@enjoy-digital.fr>
-# Copyright (c) 2018-2019 David Shah <dave@ds0.me>
 # SPDX-License-Identifier: BSD-2-Clause
+# See the project-root COPYRIGHT for attribution and license terms.
 
 from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 
 from litex.gen import *
+from litex.build.generic_platform import Pins, IOStandard, Misc
+from litex.build.io import DifferentialOutput
 
 from litex_boards.platforms import lattice_versa_ecp5
 
@@ -24,12 +25,13 @@ from litedram.phy import ECP5DDRPHY
 
 from liteeth.phy.ecp5rgmii import LiteEthPHYRGMII
 
-from gateware.network_tester_cores import network_tester_cores_add, network_tester_cores_configure_csrs
+from gateware.network_tester_cores import (network_tester_cores_add, network_tester_cores_configure_csrs,
+    network_tester_cores_add_arguments, network_tester_cores_options)
 
 # CRG ----------------------------------------------------------------------------------------------
 
 class _CRG(LiteXModule):
-    def __init__(self, platform, sys_clk_freq):
+    def __init__(self, platform, sys_clk_freq, network_tester_options=None):
         self.rst        = Signal()
         self.cd_init    = ClockDomain()
         self.cd_por     = ClockDomain()
@@ -72,7 +74,14 @@ class _CRG(LiteXModule):
                 o_CDIVX   = self.cd_sys.clk),
             AsyncResetSynchronizer(self.cd_sys, ~pll.locked | self.reset),
         ]
-        network_tester_cores_add(self, platform, instances=1)
+        network_tester_options = dict(network_tester_options or {})
+        if network_tester_options.get("mode", "").startswith("serdes"):
+            self.cd_serdes_ref = ClockDomain("serdes_ref")
+            pll.create_clkout(self.cd_serdes_ref, 125e6)
+            platform.add_period_constraint(self.cd_serdes_ref.clk, 8.0)
+            network_tester_options["serdes_refclk"] = self.cd_serdes_ref.clk
+        network_tester_cores_add(self, platform, instances=1, sys_clk_freq=sys_clk_freq,
+                                  **(network_tester_options or {}))
 
 
 # BaseSoC ------------------------------------------------------------------------------------------
@@ -89,12 +98,37 @@ class BaseSoC(SoCCore):
         **kwargs):
         platform = lattice_versa_ecp5.Platform(toolchain=toolchain, device=device)
 
+        network_tester_options = network_tester_cores_options(platform, kwargs)
+
         # CRG --------------------------------------------------------------------------------------
-        self.crg = _CRG(platform, sys_clk_freq)
+        self.crg = _CRG(platform, sys_clk_freq, network_tester_options=network_tester_options)
 
         # SoCCore -----------------------------------------_----------------------------------------
         network_tester_cores_configure_csrs(kwargs)
         SoCCore.__init__(self, platform, sys_clk_freq, ident="LiteX SoC on Versa ECP5", **kwargs)
+
+        if network_tester_options.get("mode", "").startswith("serdes"):
+            from gateware.ecp5_1000basex import ECP5SerdesStatus
+            self.serdes = ECP5SerdesStatus(self.crg.pcs_1000basex_0, self.crg.pll.locked)
+
+        # Generator monitor outputs on adjacent 3.3 V differential pairs.
+        generator = getattr(self.crg, "traffic_generator_64data_20gap_gmii_0", None)
+        if generator is None:
+            generator = getattr(self.crg, "traffic_generator_gmii_0", None)
+        if generator is not None:
+            for name, signal, pin_p in (
+                ("cycle_start", generator.cycle_start, "X3:7"),
+                ("gmii_en", generator.gmii_en, "X3:9"),
+            ):
+                platform.add_extension([(name + "_p", 0, Pins(pin_p),
+                    IOStandard("LVCMOS33D"),
+                    Misc("DRIVE=12"),
+                    Misc("SLEWRATE=FAST"))])
+                # Trellis configures both pads from the A-pad constraint:
+                # E6/PT6A -> D6/PT6B (X3:8), E7/PT9A -> D7/PT9B (X3:10).
+                # Do not create a separate top-level B-pad output buffer.
+                pad_p = platform.request(name + "_p")
+                self.specials += DifferentialOutput(signal, pad_p, Signal())
 
         # DDR3 SDRAM -------------------------------------------------------------------------------
         if not self.integrated_main_ram_size:
@@ -142,6 +176,7 @@ def main():
     parser.add_target_argument("--eth-dynamic-ip", action="store_true",      help="Enable dynamic Ethernet IP addresses setting.")
     parser.add_target_argument("--remote-ip",      default="192.168.1.100",  help="Remote IP address of TFTP server.")
     parser.add_target_argument("--eth-phy",  default=0, type=int,    help="Ethernet PHY (0 or 1).")
+    network_tester_cores_add_arguments(parser, with_serdes=True)
     args = parser.parse_args()
 
     soc = BaseSoC(
@@ -154,6 +189,11 @@ def main():
         remote_ip      = args.remote_ip,
         eth_phy        = args.eth_phy,
         toolchain      = args.toolchain,
+        network_tester_mode = args.network_tester_mode,
+        network_tester_serdes_loopback = args.network_tester_serdes_loopback,
+        network_tester_serial_tx_pin = args.network_tester_serial_tx_pin,
+        network_tester_serial_rx_pin = args.network_tester_serial_rx_pin,
+        network_tester_serial_io_standard = args.network_tester_serial_io_standard,
         **parser.soc_argdict
     )
     builder = Builder(soc, **parser.builder_argdict)

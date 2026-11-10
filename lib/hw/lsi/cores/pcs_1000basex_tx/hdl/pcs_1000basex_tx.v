@@ -1,4 +1,6 @@
-module pcs_1000basex_tx (
+module pcs_1000basex_tx #(
+    parameter REGISTER_SYMBOL = 0
+) (
     input wire clk,
     input wire rst,
     input wire symbol_ce,
@@ -26,14 +28,29 @@ module pcs_1000basex_tx (
     reg [7:0] character;
     reg control;
     wire rd_next, invalid_k;
-    assign symbol_data = character;
-    assign symbol_is_k = control;
+    wire [7:0] encoder_character;
+    wire encoder_control;
+    wire encoder_valid;
+    generate if (REGISTER_SYMBOL) begin : registered_symbol
+        encoder_8b10b_pipelined encoder (
+            .clk(clk), .rst(rst), .ce(symbol_ce),
+            .data(character), .is_k(control), .rd_in(rd),
+            .idle_data(state == IDLE_DATA),
+            .code(code_group), .rd_out(rd_next), .invalid_k(invalid_k),
+            .valid(encoder_valid), .symbol_data(encoder_character), .symbol_is_k(encoder_control)
+        );
+    end else begin : combinational_symbol
+        assign encoder_character = character;
+        assign encoder_control = control;
+        assign encoder_valid = 1'b1;
+        encoder_8b10b encoder (
+            .data(character), .is_k(control), .rd_in(rd),
+            .code(code_group), .rd_out(rd_next), .invalid_k(invalid_k)
+        );
+    end endgenerate
+    assign symbol_data = encoder_character;
+    assign symbol_is_k = encoder_control;
     assign running_disparity = rd;
-
-    encoder_8b10b encoder (
-        .data(character), .is_k(control), .rd_in(rd),
-        .code(code_group), .rd_out(rd_next), .invalid_k(invalid_k)
-    );
 
     always @* begin
         character = 8'hbc; // /K28.5/
@@ -44,7 +61,7 @@ module pcs_1000basex_tx (
                     character = 8'hfb; // /S/: replaces the first preamble byte.
             end
             IDLE_DATA: begin
-                character = correcting_idle ? 8'hc5 : 8'h50; // D5.6 / D16.2
+                character = (!REGISTER_SYMBOL && correcting_idle) ? 8'hc5 : 8'h50; // D5.6 / D16.2
                 control = 1'b0;
             end
             DATA: begin
@@ -85,8 +102,9 @@ module pcs_1000basex_tx (
             protocol_error <= 1'b0;
         end else if (symbol_ce) begin
             even <= !even;
-            rd <= rd_next;
-            if (invalid_k)
+            if (encoder_valid)
+                rd <= rd_next;
+            if (encoder_valid && invalid_k)
                 protocol_error <= 1'b1;
             case (state)
                 IDLE_COMMA: begin
@@ -101,7 +119,9 @@ module pcs_1000basex_tx (
                             protocol_error <= 1'b1;
                     end else begin
                         // Choose based on disparity BEFORE the comma.
-                        correcting_idle <= rd;
+                        // Pipelined idle choice is deferred until disparity
+                        // is known at the encoder output.
+                        if (!REGISTER_SYMBOL) correcting_idle <= rd;
                         state <= IDLE_DATA;
                     end
                 end

@@ -1,5 +1,5 @@
 `timescale 1ns/1ps
-`include "ethernet_crc_8.v"
+//`include "ethernet_crc_8.v"
 
 module ethernet_crc_8_check (
            input clk,

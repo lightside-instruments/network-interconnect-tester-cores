@@ -8,6 +8,7 @@
 
 module traffic_generator_gmii
 #(
+    parameter C_USE_LITEX_CSR       = 0,
     parameter C_S_AXI_DATA_WIDTH    = 32,
     parameter C_S_AXI_ADDR_WIDTH    = 12,
     parameter C_BASEADDR            = 32'h00000000,
@@ -27,6 +28,25 @@ module traffic_generator_gmii
 
     input [47:0] sec,
     input [29:0] nsec,
+
+    // Native register connection for LiteX (all signals synchronous to clk).
+    // C_USE_LITEX_CSR selects this connection instead of the AXI register block.
+    input [31:0] csr_flip,
+    input [31:0] csr_control,
+    input [31:0] csr_interframe_gap,
+    input [31:0] csr_interburst_gap,
+    input [31:0] csr_frames_per_burst,
+    input [63:0] csr_total_frames,
+    input [31:0] csr_frame_size,
+    input csr_frame_size_we,
+    input [31:0] csr_frame_buf,
+    input csr_frame_buf_we,
+    input [C_FRAME_BUF_ADDRESS_WIDTH-1:0] csr_frame_buf_address,
+    input csr_frame_buf_address_we,
+    output [31:0] csr_id,
+    output [31:0] csr_version,
+    output [31:0] csr_flip_read,
+    output [63:0] csr_pkts,
 
     // Slave AXI Ports
     input                                     S_AXI_ACLK,
@@ -102,6 +122,43 @@ module traffic_generator_gmii
    integer i;
 
 //Registers section
+ assign csr_id = id_reg;
+ assign csr_version = version_reg;
+ assign csr_flip_read = ip2cpu_flip_reg;
+ assign csr_pkts = pkts_reg;
+
+ generate if (C_USE_LITEX_CSR) begin : litex_regs
+   reg [C_FRAME_BUF_ADDRESS_WIDTH-1:0] next_address;
+   // The BRAM samples the data and address on the CSR write strobe.
+   assign cpu2ip_flip_reg = csr_flip;
+   assign control_reg = csr_control;
+   assign interframe_gap_reg = csr_interframe_gap;
+   assign interburst_gap_reg = csr_interburst_gap;
+   assign frames_per_burst_reg = csr_frames_per_burst;
+   assign total_frames_reg = csr_total_frames;
+   assign frame_size_reg = csr_frame_size;
+   assign frame_buf_in_data = csr_frame_buf;
+   assign frame_buf_in_address = next_address;
+   assign frame_buf_in_wr = csr_frame_buf_we;
+   // Frame-buffer writes and their address strobes are in the CSR clock
+   // domain; the transmit datapath may use a slower generated GMII clock.
+   always @(posedge S_AXI_ACLK) begin
+     if (!resetn || csr_frame_size_we)
+       next_address <= 0;
+     else if (csr_frame_buf_address_we)
+       next_address <= csr_frame_buf_address;
+     else if (csr_frame_buf_we)
+       next_address <= next_address + 1'b1;
+   end
+   assign S_AXI_AWREADY = 1'b0;
+   assign S_AXI_WREADY = 1'b0;
+   assign S_AXI_BVALID = 1'b0;
+   assign S_AXI_BRESP = 2'b00;
+   assign S_AXI_ARREADY = 1'b0;
+   assign S_AXI_RVALID = 1'b0;
+   assign S_AXI_RRESP = 2'b00;
+   assign S_AXI_RDATA = 0;
+ end else begin : axi_regs
  traffic_generator_gmii_cpu_regs
  #(
    .C_S_AXI_DATA_WIDTH (C_S_AXI_DATA_WIDTH),
@@ -152,6 +209,7 @@ module traffic_generator_gmii
    .frame_buf_wr(frame_buf_in_wr)
 
 );
+ end endgenerate
 
 bram_io #(
             .DATA_WIDTH(32),

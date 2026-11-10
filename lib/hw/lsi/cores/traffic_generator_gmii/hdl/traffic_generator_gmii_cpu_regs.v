@@ -1,4 +1,5 @@
 `include "traffic_generator_gmii_cpu_regs_defines.v"
+
 module traffic_generator_gmii_cpu_regs #
 (
 parameter C_S_AXI_DATA_WIDTH    = 32,

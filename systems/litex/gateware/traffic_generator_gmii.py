@@ -4,6 +4,7 @@ import os
 
 from migen import *
 from litex.gen import LiteXModule
+from gateware.traffic_csr import TrafficControlQueue
 from litex.soc.interconnect.csr import CSR, CSRStorage, CSRStatus
 
 
@@ -32,7 +33,10 @@ class traffic_generator_gmii(LiteXModule):
     The native register connection shares the core's datapath register signals
     with its AXI implementation, without variable-latency AXI transactions.
     """
-    def __init__(self, platform, instance_number=0):
+    def __init__(self, platform, instance_number=0, datapath_clk=None, datapath_reset=None, run_enable=None, datapath_domain=None):
+        datapath_clk = ClockSignal("sys") if datapath_clk is None else datapath_clk
+        datapath_reset = ResetSignal("sys") if datapath_reset is None else datapath_reset
+        run_enable = 1 if run_enable is None else run_enable
         self.id = CSRStatus(32, name="id")
         self.version = CSRStatus(32, name="version")
         self.flip = _ReadbackStorage(32, name="flip",
@@ -55,14 +59,19 @@ class traffic_generator_gmii(LiteXModule):
         self.cycle_start = Signal()
         self.sec = Signal(48)
         self.nsec = Signal(30)
+        control = self.control.storage
+        if datapath_domain is not None:
+            self.control_cdc = TrafficControlQueue(self.control, datapath_domain,
+                                                   datapath_reset, reset_value=0)
+            control = self.control_cdc.value
         self.traffic_generator_gmii_params = dict(
             p_C_USE_LITEX_CSR=1,
-            i_clk=ClockSignal(), i_resetn=~ResetSignal(),
+            i_clk=datapath_clk, i_resetn=~datapath_reset,
             o_gmii_d=self.gmii_d, o_gmii_en=self.gmii_en, o_gmii_er=self.gmii_er,
             o_cycle_start=self.cycle_start, i_sec=self.sec, i_nsec=self.nsec,
             o_csr_id=self.id.status, o_csr_version=self.version.status,
             i_csr_flip=self.flip.storage, o_csr_flip_read=self.flip.readback,
-            i_csr_control=self.control.storage,
+            i_csr_control=Cat(control[0] & run_enable, control[1:]),
             i_csr_interframe_gap=self.interframe_gap.storage,
             i_csr_interburst_gap=self.interburst_gap.storage,
             i_csr_frames_per_burst=self.frames_per_burst.storage,

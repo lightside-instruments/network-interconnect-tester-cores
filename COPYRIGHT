@@ -7,24 +7,68 @@ Files: *
 Copyright: 2019-2020 Lightside Instruments AS
 License: GPL-3+
 
+Files: systems/litex/gateware/traffic_csr.py
+       systems/litex/tests/test_traffic_csr.py
+Copyright: 2026 Lightside Instruments AS
+License: GPL-3+
+
+Files: systems/litex/gateware/network_tester_cores.py
+       systems/litex/gateware/rtclock.py
+       systems/litex/tests/test_traffic_generator_gmii.py
+Copyright: 2019-2020, 2026 Lightside Instruments AS
+License: GPL-3+
+
+Files: systems/litex/gateware/ecp5_1000basex.py
+       systems/litex/tests/test_ecp5_1000basex.py
+       systems/litex/examples/generate_8b10b_rx_rom.py
+       systems/litex/prog/versa_ecp5_sequence_region.py
+Copyright: 2026 Lightside Instruments AS
+License: BSD-2-Clause
+Comment: The ECP5 wrapper imports the DCUA electrical parameter profile and
+         SCI controller from LiteICLink; no upstream source files are modified.
+
 Files: systems/ethernet96/*
 Copyright: 2019 Opsero Electronic Design Inc.
 License: MIT
 
-Files: lib/hw/lsi/cores/pcs_1000basex_rx/*
+Files: lib/hw/lsi/cores/traffic_generator_64data_20gap_gmii/*
+       lib/hw/lsi/cores/pcs_1000basex_rx/*
        lib/hw/lsi/cores/pcs_1000basex_tx/*
        systems/litex/gateware/network_tester_reset_sync.v
+       systems/litex/gateware/network_tester_pcs_rx_parallel.v
+       systems/litex/gateware/gatemate_1000basex.py
+       systems/litex/gateware/traffic_generator_64data_20gap_gmii.py
+       systems/litex/tests/test_fixed_serdes_tx.py
+       systems/litex/tests/test_gatemate_rx_rom.py
 Copyright: 2026 Lightside Instruments AS
 License: BSD-2-Clause
 
 Files: lib/hw/lsi/cores/pcs_1000basex_tx/hdl/encoder_8b10b.v
        lib/hw/lsi/cores/pcs_1000basex_rx/hdl/decoder_8b10b.v
+       systems/litex/gateware/network_tester_decoder_8b10b_rom.v
 Copyright: 2016-2017 Sebastien Bourdeauducq <sb@m-labs.hk>
            2019-2020 Florent Kermarrec <florent@enjoy-digital.fr>
            2026 Lightside Instruments AS
 License: BSD-2-Clause
 Comment: Encoding tables and algorithm adapted from LiteX code_8b10b.py.
          The decoder lookup derives from the transmitter's LiteX vectors.
+
+Files: systems/litex/gateware/gatemate_jtag_uart.py
+Copyright: 2017 Robert Jordens <jordens@gmail.com>
+           2019 Antti Lukats <antti.lukats@gmail.com>
+           2019-2022 Florent Kermarrec <florent@enjoy-digital.fr>
+           2021 Gregory Davill <greg.davill@gmail.com>
+           2021 Gabriel L. Somlo <somlo@cmu.edu>
+           2021 Jevin Sweval <jevinsweval@gmail.com>
+           2026 Lightside Instruments AS
+License: BSD-2-Clause
+Comment: Stream framing adapted from LiteX soc/cores/jtag.py JTAGPHY.
+
+Files: systems/litex/tests/test_gatemate_jtag_uart.py
+       systems/litex/prog/openocd_gatemate_console.cfg
+       systems/litex/prog/gatemate_console.sdc
+Copyright: 2026 Lightside Instruments AS
+License: BSD-2-Clause
 
 Files: systems/litex/boards/platforms/gsd_orangecrab.py
 Copyright: 2020 Greg Davill <greg.davill@gmail.com>
