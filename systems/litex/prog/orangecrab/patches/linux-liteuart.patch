@@ -1,0 +1,113 @@
+diff --git a/drivers/tty/serial/liteuart.c b/drivers/tty/serial/liteuart.c
+index 4c0604325..e1d53958f 100644
+--- a/drivers/tty/serial/liteuart.c
++++ b/drivers/tty/serial/liteuart.c
+@@ -6,6 +6,7 @@
+  */
+ 
+ #include <linux/console.h>
++#include <linux/delay.h>
+ #include <linux/litex.h>
+ #include <linux/module.h>
+ #include <linux/of.h>
+@@ -67,6 +68,8 @@ static struct uart_driver liteuart_driver = {
+ #endif
+ };
+ 
++static void liteuart_start_tx(struct uart_port *port);
++
+ static void liteuart_timer(struct timer_list *t)
+ {
+ 	struct liteuart_port *uart = from_timer(uart, t, timer);
+@@ -75,6 +78,7 @@ static void liteuart_timer(struct timer_list *t)
+ 	unsigned int flg = TTY_NORMAL;
+ 	int ch;
+ 	unsigned long status;
++	unsigned long flags;
+ 
+ 	while ((status = !litex_read8(membase + OFF_RXEMPTY)) == 1) {
+ 		ch = litex_read8(membase + OFF_RXTX);
+@@ -90,13 +94,23 @@ static void liteuart_timer(struct timer_list *t)
+ 		tty_flip_buffer_push(&port->state->port);
+ 	}
+ 
++	/* Retry queued TX without holding interrupts off while the FIFO is full. */
++	spin_lock_irqsave(&port->lock, flags);
++	liteuart_start_tx(port);
++	spin_unlock_irqrestore(&port->lock, flags);
+ 	mod_timer(&uart->timer, jiffies + uart_poll_timeout(port));
+ }
+ 
+ static void liteuart_putchar(struct uart_port *port, unsigned char ch)
+ {
+-	while (litex_read8(port->membase + OFF_TXFULL))
+-		cpu_relax();
++	unsigned int retries = 1000;
++
++	/* USB console backpressure must not stop the CPU indefinitely. */
++	while (litex_read8(port->membase + OFF_TXFULL)) {
++		if (!retries--)
++			return;
++		udelay(1);
++	}
+ 
+ 	litex_write8(port->membase + OFF_RXTX, ch);
+ }
+@@ -130,16 +144,21 @@ static void liteuart_start_tx(struct uart_port *port)
+ 	unsigned char ch;
+ 
+ 	if (unlikely(port->x_char)) {
++		if (litex_read8(port->membase + OFF_TXFULL))
++			return;
+ 		litex_write8(port->membase + OFF_RXTX, port->x_char);
+ 		port->icount.tx++;
+ 		port->x_char = 0;
+-	} else if (!uart_circ_empty(xmit)) {
+-		while (xmit->head != xmit->tail) {
+-			ch = xmit->buf[xmit->tail];
+-			xmit->tail = (xmit->tail + 1) & (UART_XMIT_SIZE - 1);
+-			port->icount.tx++;
+-			liteuart_putchar(port, ch);
+-		}
++	}
++	if (uart_circ_empty(xmit) || uart_tx_stopped(port))
++		return;
++
++	while (!uart_circ_empty(xmit) &&
++	       !litex_read8(port->membase + OFF_TXFULL)) {
++		ch = xmit->buf[xmit->tail];
++		litex_write8(port->membase + OFF_RXTX, ch);
++		xmit->tail = (xmit->tail + 1) & (UART_XMIT_SIZE - 1);
++		port->icount.tx++;
+ 	}
+ 
+ 	if (uart_circ_chars_pending(xmit) < WAKEUP_CHARS)
+@@ -166,8 +185,7 @@ static int liteuart_startup(struct uart_port *port)
+ 	/* disable events */
+ 	litex_write8(port->membase + OFF_EV_ENABLE, 0);
+ 
+-	/* prepare timer for polling */
+-	timer_setup(&uart->timer, liteuart_timer, 0);
++	/* Restart the timer initialized at probe, after shutdown drained it. */
+ 	mod_timer(&uart->timer, jiffies + uart_poll_timeout(port));
+ 
+ 	return 0;
+@@ -175,6 +193,10 @@ static int liteuart_startup(struct uart_port *port)
+ 
+ static void liteuart_shutdown(struct uart_port *port)
+ {
++	struct liteuart_port *uart = to_liteuart_port(port);
++
++	/* The callback rearms itself: wait for it before allowing a reopen. */
++	del_timer_sync(&uart->timer);
+ }
+ 
+ static void liteuart_set_termios(struct uart_port *port, struct ktermios *new,
+@@ -286,6 +308,7 @@ static int liteuart_probe(struct platform_device *pdev)
+ 	port->type = PORT_UNKNOWN;
+ 	port->line = dev_id;
+ 	spin_lock_init(&port->lock);
++	timer_setup(&uart->timer, liteuart_timer, 0);
+ 
+ 	platform_set_drvdata(pdev, port);
+ 

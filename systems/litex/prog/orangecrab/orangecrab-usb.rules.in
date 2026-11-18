@@ -1,0 +1,3 @@
+# Replace @USER@ with the operator's host account before installing.
+SUBSYSTEM=="usb", ATTR{idVendor}=="1209", ATTR{idProduct}=="5af0", OWNER="@USER@", MODE="0600"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="5bf2", OWNER="@USER@", MODE="0600"

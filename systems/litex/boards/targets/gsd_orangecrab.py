@@ -3,8 +3,8 @@
 #
 # This file was originally part of LiteX-Boards.
 #
-# Copyright (c) Greg Davill <greg.davill@gmail.com>
 # SPDX-License-Identifier: BSD-2-Clause
+# See the project-root COPYRIGHT for attribution and license terms.
 
 import os
 import sys
@@ -166,6 +166,8 @@ class _CRGSDRAM(LiteXModule):
 # BaseSoC ------------------------------------------------------------------------------------------
 
 class BaseSoC(SoCCore):
+    network_tester_expand_csr_paging = True
+
     def __init__(self, revision="0.2", device="25F", sys_clk_freq=48e6, toolchain="trellis",
         sdram_device    = "MT41K64M16",
         with_dfu_rst    = True,
@@ -184,7 +186,8 @@ class BaseSoC(SoCCore):
         # SoCCore ----------------------------------------------------------------------------------
         # Defaults to USB ACM through ValentyUSB.
         kwargs["uart_name"] = "usb_acm"
-        network_tester_cores_configure_csrs(kwargs)
+        if self.network_tester_expand_csr_paging:
+            network_tester_cores_configure_csrs(kwargs)
         SoCCore.__init__(self, platform, sys_clk_freq, ident="LiteX SoC on OrangeCrab", **kwargs)
 
         # DDR3 SDRAM -------------------------------------------------------------------------------

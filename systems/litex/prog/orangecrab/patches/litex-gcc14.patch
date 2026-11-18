@@ -1,0 +1,13 @@
+diff --git a/litex/soc/software/common.mak b/litex/soc/software/common.mak
+index 1215ace6b..7e987d3cb 100644
+--- a/litex/soc/software/common.mak
++++ b/litex/soc/software/common.mak
+@@ -61,7 +61,7 @@ endif
+ ifneq ($(CPUFAMILY), arm)
+ COMMONFLAGS += -fexceptions
+ endif
+-CFLAGS = $(COMMONFLAGS) -Wstrict-prototypes -Wold-style-definition -Wmissing-prototypes
++CFLAGS = $(COMMONFLAGS) -Wstrict-prototypes -Wold-style-definition -Wmissing-prototypes -Wno-implicit-function-declaration
+ CXXFLAGS = $(COMMONFLAGS) -std=c++11 -I$(SOC_DIRECTORY)/software/include/basec++ -fno-rtti -ffreestanding
+ LDFLAGS = -nostdlib -nodefaultlibs -Wl,--no-dynamic-linker -Wl,--build-id=none $(CFLAGS) -L$(BUILDINC_DIRECTORY)
+ 

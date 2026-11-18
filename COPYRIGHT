@@ -18,6 +18,35 @@ Files: systems/litex/gateware/network_tester_cores.py
 Copyright: 2019-2020, 2026 Lightside Instruments AS
 License: GPL-3+
 
+Files: systems/litex/boards/targets/gsd_orangecrab_debian.py
+Copyright: 2026 Lightside Instruments AS
+License: BSD-2-Clause
+
+Files: systems/litex/ORANGECRAB_DEBIAN.md
+       systems/litex/prog/orangecrab/fetch-sources.py
+       systems/litex/prog/orangecrab/check-timing.py
+       systems/litex/prog/orangecrab/configure-rootfs.sh
+       systems/litex/prog/orangecrab/ft232h.cfg
+       systems/litex/prog/orangecrab/orangecrab-usb.rules.in
+       systems/litex/prog/orangecrab/boot.json
+       systems/litex/prog/orangecrab/sources.json
+       systems/litex/prog/orangecrab/rootfs-packages.tsv
+Copyright: 2026 Lightside Instruments AS
+License: BSD-2-Clause
+
+Files: systems/litex/prog/orangecrab/patches/linux-liteuart.patch
+       systems/litex/prog/orangecrab/linux.config
+Copyright: Linux kernel contributors
+           2019-2020 Antmicro
+           2026 Lightside Instruments AS
+License: GPL-2
+Comment: Kernel configuration and patch for the GPL-2.0 LiteUART driver.
+
+Files: systems/litex/prog/orangecrab/patches/litex-gcc14.patch
+Copyright: LiteX contributors
+           2026 Lightside Instruments AS
+License: BSD-2-Clause
+
 Files: systems/litex/gateware/ecp5_1000basex.py
        systems/litex/tests/test_ecp5_1000basex.py
        systems/litex/examples/generate_8b10b_rx_rom.py
@@ -155,3 +184,7 @@ License: BSD-2-Clause
  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  POSSIBILITY OF SUCH DAMAGE.
+
+License: GPL-2
+ On Debian systems, the complete GNU General Public License version 2
+ is in /usr/share/common-licenses/GPL-2.

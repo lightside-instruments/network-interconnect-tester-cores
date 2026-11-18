@@ -1,0 +1,86 @@
+[
+  {
+    "directory": "migen",
+    "url": "https://git.m-labs.hk/M-Labs/migen.git",
+    "revision": "4c2ae8dfeea37f235b52acb8166f12acaaae4f7c",
+    "python": true,
+    "submodules": false
+  },
+  {
+    "directory": "litex",
+    "url": "https://github.com/enjoy-digital/litex.git",
+    "revision": "4452113fa0ad43f4373258710c837ee408e5b0d0",
+    "python": true,
+    "submodules": false
+  },
+  {
+    "directory": "litex-boards",
+    "url": "https://github.com/litex-hub/litex-boards.git",
+    "revision": "081a0ed5f63967abf3fc3f7b2afdd03f19ad0468",
+    "python": true,
+    "submodules": false
+  },
+  {
+    "directory": "litedram",
+    "url": "https://github.com/enjoy-digital/litedram.git",
+    "revision": "64eaa3d0b6ff81842f65fafd16562790445a804b",
+    "python": true,
+    "submodules": false
+  },
+  {
+    "directory": "litesdcard",
+    "url": "https://github.com/enjoy-digital/litesdcard.git",
+    "revision": "8a12a6943461e6a22bd42dbdc0c19bea7f62546a",
+    "python": true,
+    "submodules": false
+  },
+  {
+    "directory": "valentyusb",
+    "url": "https://github.com/litex-hub/valentyusb.git",
+    "revision": "0b534ccfccfcdcb7a5db219743f0c0b20e5ec412",
+    "python": true,
+    "submodules": false
+  },
+  {
+    "directory": "pythondata-cpu-vexiiriscv",
+    "url": "https://github.com/litex-hub/pythondata-cpu-vexiiriscv.git",
+    "revision": "f0b0d455b56767a7ff34efb0a8b56ec237ad481d",
+    "python": true,
+    "submodules": false
+  },
+  {
+    "directory": "pythondata-software-picolibc",
+    "url": "https://github.com/litex-hub/pythondata-software-picolibc.git",
+    "revision": "a5e11229885a87083ec54034f8d693ba52ea2718",
+    "python": true,
+    "submodules": true
+  },
+  {
+    "directory": "pythondata-software-compiler_rt",
+    "url": "https://github.com/litex-hub/pythondata-software-compiler_rt.git",
+    "revision": "fcb03245613ccf3079cc833a701f13d0beaae09d",
+    "python": true,
+    "submodules": false
+  },
+  {
+    "directory": "pythondata-cpu-vexiiriscv/pythondata_cpu_vexiiriscv/verilog/ext/VexiiRiscv",
+    "url": "https://github.com/SpinalHDL/VexiiRiscv.git",
+    "revision": "dbcaa98fca102b9c691320a80f90429b4e2a5335",
+    "python": false,
+    "submodules": true
+  },
+  {
+    "directory": "linux",
+    "url": "https://github.com/Dolu1990/litex-linux.git",
+    "revision": "247f34f7b80357943234f93f247a1ae6b6c3a740",
+    "python": false,
+    "submodules": false
+  },
+  {
+    "directory": "opensbi",
+    "url": "https://github.com/riscv-software-src/opensbi.git",
+    "revision": "ed70256dd22c09962d146e433834239825ef0616",
+    "python": false,
+    "submodules": false
+  }
+]
