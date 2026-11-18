@@ -14,6 +14,31 @@ from litex_boards.platforms import gsd_orangecrab
 from gateware.network_tester_cores import network_tester_cores_add_arguments
 
 
+def add_liteeth_dts(dts, csr):
+    # The fabric PCS has no MDIO bus. The Linux driver uses the MAC and buffer.
+    address = csr["csr_bases"]["ethmac"]
+    memory = csr["memories"]["ethmac"]
+    constants = csr["constants"]
+    return dts + f"""
+&{{/chosen}} {{
+    bootargs = "console=liteuart earlycon=liteuart,0xf0001000 rootwait root=/dev/mmcblk0p2 net.ifnames=0";
+}};
+
+&{{/soc}} {{
+    ethernet@{address:x} {{
+        compatible = "litex,liteeth";
+        reg = <0x{address:x} 0x7c>, <0x{memory["base"]:x} 0x{memory["size"]:x}>;
+        reg-names = "mac", "buffer";
+        interrupts = <{constants["ethmac_interrupt"]}>;
+        litex,rx-slots = <{constants["ethmac_rx_slots"]}>;
+        litex,tx-slots = <{constants["ethmac_tx_slots"]}>;
+        litex,slot-size = <{constants["ethmac_slot_size"]}>;
+        status = "okay";
+    }};
+}};
+"""
+
+
 def main():
     parser = LiteXArgumentParser(
         platform=gsd_orangecrab.Platform,
@@ -24,14 +49,16 @@ def main():
                         integrated_sram_size=0x4000)
     parser.add_target_argument("--sys-clk-freq", type=float, default=40e6)
     parser.add_target_argument("--with-network-tester", action="store_true",
-                               help="Add CSR-configurable traffic generator, analyzer and PCS")
+                               help="Share external serial GPIO between Debian Ethernet and the tester")
     network_tester_cores_add_arguments(parser)
+    parser.set_defaults(network_tester_mode="serial_external")
     args = parser.parse_args()
     if args.cpu_type != "vexiiriscv" or args.cpu_variant != "debian":
         parser.error("This target requires --cpu-type vexiiriscv --cpu-variant debian")
     if args.integrated_main_ram_size:
         parser.error("Use external DDR3; integrated main RAM must remain disabled")
     network_options = {}
+    shared_gmii = args.with_network_tester and args.network_tester_mode == "serial_external"
     BaseSoC = DebianSoC
     if args.with_network_tester:
         from boards.targets.gsd_orangecrab import BaseSoC as NetworkTesterSoC
@@ -51,9 +78,11 @@ def main():
                 "sdcard": 6,
                 "sdram": 7,
                 "crg": 8,
+                **({"ethmac": 9, "ethphy": 10} if shared_gmii else {}),
             }
 
         network_options = dict(
+            shared_gmii=shared_gmii,
             network_tester_mode=args.network_tester_mode,
             network_tester_serial_tx_pin=args.network_tester_serial_tx_pin,
             network_tester_serial_rx_pin=args.network_tester_serial_rx_pin,
@@ -62,14 +91,26 @@ def main():
                   sys_clk_freq=args.sys_clk_freq, toolchain=args.toolchain,
                   **network_options, **parser.soc_argdict)
     soc.add_sdcard()
+    if shared_gmii:
+        from gateware.gmii_mux import GMIIMux
+
+        crg = soc.crg
+        soc.ethphy = GMIIMux(soc.platform, crg.pcs_1000basex_0,
+                            crg.traffic_generator_gmii_0, crg.traffic_analyzer_gmii_0)
+        soc.add_ethernet(phy=soc.ethphy, phy_cd="gmii", with_timing_constraints=False)
     builder = Builder(soc, **parser.builder_argdict)
     if args.build:
         builder.build(**parser.toolchain_argdict)
         csr_json = Path(builder.output_dir)/"csr.json"
         # An SD-root kernel must have its storage and root-filesystem drivers
         # built in. Firmware/kernel/rootfs are supplied separately.
-        dts = generate_dts(json.loads(csr_json.read_text()),
-                           initrd="disabled", root_device="mmcblk0p2")
+        csr = json.loads(csr_json.read_text())
+        # The stock DTS generator assumes any ethphy CSR bank provides MDIO.
+        dts_csr = {**csr, "csr_bases": {name: address for name, address in csr["csr_bases"].items()
+                                      if not shared_gmii or name != "ethphy"}}
+        dts = generate_dts(dts_csr, initrd="disabled", root_device="mmcblk0p2")
+        if shared_gmii:
+            dts = add_liteeth_dts(dts, csr)
         (Path(builder.output_dir)/"orangecrab-debian.dts").write_text(dts)
     if args.load:
         soc.platform.create_programmer().load_bitstream(

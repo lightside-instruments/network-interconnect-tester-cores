@@ -234,13 +234,13 @@ To include the configurable traffic generator, receive analyzer and fabric
 
 Use a separate output directory, for example
 `build/orangecrab-debian-network-tester`, and run the same synthesis, routing,
-timing check and packing steps. The current layout passed all eight clock
+timing check and packing steps. The tester-only build passed all eight clock
 constraints with nextpnr 0.10-39-g33e1c903 and `--router router2 --threads 2
 --seed 2`, including 44.571 MHz against 40.003 MHz for the system clock.
 The bitstream, SVF, BIOS, and CSR maps are in the
 [build report](../../codex/reports/orangecrab-debian-network-tester/stable-csr-seed2/).
 The board reached the Debian 13 serial login prompt from the existing SD
-card. The physical GPIO loopback passed from Debian with one frame and
+card. Its physical GPIO loopback passed from Debian with one frame and
 with 1,000 frames in ten bursts, with zero CRC or preamble errors.
 
 The established OrangeCrab connections are:
@@ -261,9 +261,10 @@ electrical interface. TX can run without an incoming RX stream.
 
 The Debian target keeps 0x800-byte CSR pages and reserves the original
 peripheral banks. UART remains at `0xf0001000` with IRQ 1, and SD remains
-at `0xf0003000` with IRQ 3. The corrected non-tester 128 MiB DTB has
-these same addresses. Keep the generated DTB, bitstream, initialized BIOS,
-`csr.csv` and `csr.json` together. The patched kernel can be reused.
+at `0xf0003000` with IRQ 3. The corrected non-tester 128 MiB DTB has these
+same addresses. The shared MAC adds its own device-tree node. Keep the
+generated DTB, bitstream, initialized BIOS, `csr.csv` and `csr.json`
+together. The patched kernel can be reused.
 
 The generated CSR map is the authority for software access. For this target,
 the generator starts at `0xf0004000` and the analyzer at `0xf0004038`.
@@ -275,6 +276,46 @@ generated headers; the older AXI register layout is different.
 The inherited real-time clock increments by 8 nominal nanoseconds per system
 cycle. At 40 MHz its timestamps therefore advance at 0.32 times wall-clock
 time; treat them as scaled timestamps until the clock increment is adapted.
+
+#### Switch between `eth0` and the traffic tester
+
+The external-serial build shares one fabric PCS between LiteEth and the
+tester. LiteEth owns both directions after reset and Debian exposes it as
+`eth0`. Install the newly generated DTB to register the MAC. The patched
+kernel configuration already includes the LiteEth driver. The GPIO link
+requires a peer that uses the same 10 Mbit/s serial 8b/10b encoding.
+
+The [shared MAC build](../../codex/reports/orangecrab-debian-network-tester/eth0-seed4/)
+passed all eight clock constraints with router2, two threads, and seed 4.
+The system clock reached 43.109 MHz against 40.003 MHz. On the board,
+Linux registered `eth0` and Debian reached the serial login prompt after
+installing the matching DTB and loading the FPGA over JTAG.
+With a physical GPIO loopback, `eth0` received an exact Ethernet frame
+before and after switching modes. In tester mode, the board received all
+1,000 frames in ten bursts with zero CRC or preamble errors.
+
+In a root shell, use the 32-bit `ethphy_select` CSR from the generated
+`csr.csv`. The address is `0xf0005000` in this build. The commands below
+use the BusyBox `devmem` applet.
+
+```sh
+ip link show eth0
+ip link set eth0 down
+busybox devmem 0xf0005000 32 1  # Tester
+busybox devmem 0xf0005000 32    # Verify selector
+```
+
+Stop the generator and let any in-flight frames finish before returning to
+adapter mode:
+
+```sh
+busybox devmem 0xf000400c 32 0  # Stop generator
+busybox devmem 0xf0005000 32 0  # LiteEth
+ip link set eth0 up
+```
+
+The mode request crosses into each GMII clock domain and takes effect
+between frames. `eth0` remains registered while the tester owns the link.
 
 ## 4. Build the patched RV64 Linux kernel
 

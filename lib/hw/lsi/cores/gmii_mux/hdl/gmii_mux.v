@@ -9,7 +9,8 @@ module gmii_mux
  // AXI Registers Data Width
     parameter C_S_AXI_DATA_WIDTH    = 32,          
     parameter C_S_AXI_ADDR_WIDTH    = 12,          
-    parameter C_BASEADDR            = 32'h00000000
+    parameter C_BASEADDR            = 32'h00000000,
+    parameter C_USE_EXTERNAL_SELECT = 0
 
 
 )
@@ -71,7 +72,8 @@ module gmii_mux
     output                                    S_AXI_WREADY,
     output     [1 :0]                         S_AXI_BRESP,
     output                                    S_AXI_BVALID,
-    output                                    S_AXI_AWREADY
+    output                                    S_AXI_AWREADY,
+    input [7:0] external_select
 );
 
    reg      [`REG_ID_BITS]    id_reg = `REG_ID_DEFAULT;
@@ -110,6 +112,11 @@ module gmii_mux
    reg gmii_in_5_tx_en_r;
    reg gmii_in_5_tx_er_r;
 
+generate if (C_USE_EXTERNAL_SELECT) begin : external_control
+    assign select_reg = external_select;
+    assign {S_AXI_ARREADY, S_AXI_RDATA, S_AXI_RRESP, S_AXI_RVALID,
+            S_AXI_WREADY, S_AXI_BRESP, S_AXI_BVALID, S_AXI_AWREADY} = 0;
+end else begin : axi_control
 //Registers section
  gmii_mux_cpu_regs 
  #(
@@ -147,6 +154,7 @@ module gmii_mux
     .version_reg          (version_reg),
     .select_reg          (select_reg)
 );
+end endgenerate
 
 always @(posedge gtx_clk) begin
         select_reg_r <= select_reg;

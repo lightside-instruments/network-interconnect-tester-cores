@@ -19,6 +19,7 @@ Copyright: 2019-2020, 2026 Lightside Instruments AS
 License: GPL-3+
 
 Files: systems/litex/boards/targets/gsd_orangecrab_debian.py
+       systems/litex/gateware/gmii_mux.py
 Copyright: 2026 Lightside Instruments AS
 License: BSD-2-Clause
 

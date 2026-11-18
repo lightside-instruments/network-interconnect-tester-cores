@@ -172,11 +172,13 @@ class BaseSoC(SoCCore):
         sdram_device    = "MT41K64M16",
         with_dfu_rst    = True,
         with_led_chaser = True,
+        shared_gmii     = False,
         **kwargs):
         platform = gsd_orangecrab.Platform(revision=revision, device=device ,toolchain=toolchain)
 
         network_tester_options = network_tester_cores_options(
             platform, kwargs, default_serial_resource="network_tester_serial")
+        network_tester_options["shared_gmii"] = shared_gmii
 
         # CRG --------------------------------------------------------------------------------------
         crg_cls      = _CRGSDRAM if kwargs.get("integrated_main_ram_size", 0) == 0 else _CRG

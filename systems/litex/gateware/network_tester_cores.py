@@ -21,7 +21,7 @@ def _network_tester_rtclock_add(parent, platform, pcs):
 
 def network_tester_cores_add(parent, platform, instances=1, sys_clk_freq=None,
                              mode="serial_loopback", serial_pads=None, serdes_loopback=False,
-                             serdes_refclk=None):
+                             serdes_refclk=None, shared_gmii=False):
     """Attach numbered cores directly to parent, preserving CSR names/order.
 
     Instance 0 uses direct GMII, internal serial, or external serial wiring.
@@ -40,6 +40,8 @@ def network_tester_cores_add(parent, platform, instances=1, sys_clk_freq=None,
         raise ValueError("serial_external requires serial_pads with tx and rx signals")
     if serdes_loopback and mode != "serdes":
         raise ValueError("SERDES PMA loopback requires serdes mode")
+    if shared_gmii and mode != "serial_external":
+        raise ValueError("Shared GMII requires external serial mode")
     pcs = None
     if mode in ("serdes", "serdes_tx", "serdes_dummy_pcs_tx", "serdes_64data_20gap_tx", "serdes_64data_20gap"):
         device = getattr(platform, "device", "").upper()
@@ -131,9 +133,12 @@ def network_tester_cores_add(parent, platform, instances=1, sys_clk_freq=None,
             parent.comb += pcs.serial_rx.eq(serial_pads.rx)
         if hasattr(serial_pads, "signal_detect"):
             parent.comb += pcs.signal_detect.eq(serial_pads.signal_detect)
+    if not shared_gmii:
+        parent.comb += [
+            pcs.tx_data.eq(generator.gmii_d), pcs.tx_en.eq(generator.gmii_en), pcs.tx_er.eq(generator.gmii_er),
+            analyzer.gmii_d.eq(pcs.rx_data), analyzer.gmii_en.eq(pcs.rx_dv), analyzer.gmii_er.eq(pcs.rx_er),
+        ]
     parent.comb += [
-        pcs.tx_data.eq(generator.gmii_d), pcs.tx_en.eq(generator.gmii_en), pcs.tx_er.eq(generator.gmii_er),
-        analyzer.gmii_d.eq(pcs.rx_data), analyzer.gmii_en.eq(pcs.rx_dv), analyzer.gmii_er.eq(pcs.rx_er),
         pcs.control_overflow.eq(generator.control_cdc.overflow | analyzer.control_cdc.overflow),
         pcs.time_sec.eq(parent.rtclock.sec), pcs.time_nsec.eq(parent.rtclock.nsec),
         generator.sec.eq(pcs.gen_sec), generator.nsec.eq(pcs.gen_nsec),
