@@ -43,6 +43,13 @@ Copyright: Linux kernel contributors
 License: GPL-2
 Comment: Kernel configuration and patch for the GPL-2.0 LiteUART driver.
 
+Files: systems/litex/prog/orangecrab/patches/linux-liteeth-carrier.patch
+       systems/litex/prog/orangecrab/patches/linux-liteeth-link-binding.patch
+Copyright: Linux kernel contributors
+           2017 Joel Stanley
+           2026 Lightside Instruments AS
+License: GPL-2+
+
 Files: systems/litex/prog/orangecrab/patches/litex-gcc14.patch
 Copyright: LiteX contributors
            2026 Lightside Instruments AS
@@ -187,5 +194,9 @@ License: BSD-2-Clause
  POSSIBILITY OF SUCH DAMAGE.
 
 License: GPL-2
+ On Debian systems, the complete GNU General Public License version 2
+ is in /usr/share/common-licenses/GPL-2.
+
+License: GPL-2+
  On Debian systems, the complete GNU General Public License version 2
  is in /usr/share/common-licenses/GPL-2.

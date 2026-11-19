@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-2-Clause
-"""Switch a fabric PCS between LiteEth and the traffic tester."""
+"""Select the fabric PCS transmitter and share ingress with both consumers."""
 
 from pathlib import Path
 
@@ -8,33 +8,33 @@ from migen.genlib.cdc import MultiReg
 from liteeth.common import eth_phy_description
 from litex.gen import LiteXModule
 from litex.soc.interconnect import stream
-from litex.soc.interconnect.csr import CSRStorage
+from litex.soc.interconnect.csr import CSRStatus, CSRStorage
 
 
 class GMIIMux(LiteXModule):
     dw = 8
 
     def __init__(self, platform, pcs, generator, analyzer):
-        self.select = CSRStorage(1, description="0 selects LiteEth, 1 selects the network tester.")
+        self.select = CSRStorage(1, description="TX source: 0 selects LiteEth, 1 selects the traffic generator.")
+        self.link = CSRStatus(2, description="Bit 0: RX clock locked. Bit 1: RX 8b/10b synchronized.")
+        self.specials += [
+            MultiReg(pcs.cdr_locked, self.link.status[0], "sys"),
+            MultiReg(pcs.pcs_synced, self.link.status[1], "sys"),
+        ]
         self.sink = sink = stream.Endpoint(eth_phy_description(self.dw))
         self.source = source = stream.Endpoint(eth_phy_description(self.dw))
 
         tx_request, tx_tester = Signal(), Signal()
-        rx_request, rx_tester = Signal(), Signal()
-        self.specials += [
-            MultiReg(self.select.storage, tx_request, "gmii_tx"),
-            MultiReg(self.select.storage, rx_request, "gmii_rx"),
-        ]
+        self.specials += MultiReg(self.select.storage, tx_request, "gmii_tx")
         mac_tx = Signal()
         self.sync.gmii_tx += If(~pcs.tx_en & ~mac_tx & ~(tx_tester & generator.gmii_en),
                                tx_tester.eq(tx_request))
-        self.sync.gmii_rx += If(~pcs.rx_dv, rx_tester.eq(rx_request))
         self.comb += [
             mac_tx.eq(sink.valid & sink.ready),
             sink.ready.eq(~tx_tester & pcs.ready),
             analyzer.gmii_d.eq(pcs.rx_data),
-            analyzer.gmii_en.eq(pcs.rx_dv & rx_tester),
-            analyzer.gmii_er.eq(pcs.rx_er & rx_tester),
+            analyzer.gmii_en.eq(pcs.rx_dv),
+            analyzer.gmii_er.eq(pcs.rx_er),
         ]
 
         rtl = Path(__file__).resolve().parents[3] / "lib/hw/lsi/cores/gmii_mux/hdl"
@@ -58,15 +58,14 @@ class GMIIMux(LiteXModule):
 
         # GMII supplies one byte per cycle and indicates end of frame when DV
         # falls. Delay the byte so LiteEth sees last on that final valid beat.
-        rx_valid, rx_error = Signal(), Signal()
-        self.comb += rx_valid.eq(pcs.rx_dv & ~rx_tester)
+        rx_error = Signal()
         self.sync.gmii_rx += [
-            source.valid.eq(rx_valid),
+            source.valid.eq(pcs.rx_dv),
             source.data.eq(pcs.rx_data),
             rx_error.eq(pcs.rx_er),
         ]
         self.comb += [
-            source.last.eq(source.valid & ~rx_valid),
+            source.last.eq(source.valid & ~pcs.rx_dv),
             source.last_be.eq(source.last),
             source.error.eq(rx_error | (source.last & pcs.rx_er)),
         ]

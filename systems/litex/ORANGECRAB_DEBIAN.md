@@ -280,12 +280,13 @@ time; treat them as scaled timestamps until the clock increment is adapted.
 #### Switch between `eth0` and the traffic tester
 
 The external-serial build shares one fabric PCS between LiteEth and the
-tester. LiteEth owns both directions after reset and Debian exposes it as
-`eth0`. Install the newly generated DTB to register the MAC. The patched
+tester. Ingress goes to both LiteEth and the analyzer in either mode.
+LiteEth supplies TX after reset and Debian exposes it as `eth0`.
+Install the newly generated DTB to register the MAC. The patched
 kernel configuration already includes the LiteEth driver. The GPIO link
 requires a peer that uses the same 10 Mbit/s serial 8b/10b encoding.
 
-The [shared MAC build](../../codex/reports/orangecrab-debian-network-tester/eth0-seed4/)
+The [previous shared MAC build](../../codex/reports/orangecrab-debian-network-tester/eth0-seed4/)
 passed all eight clock constraints with router2, two threads, and seed 4.
 The system clock reached 43.109 MHz against 40.003 MHz. On the board,
 Linux registered `eth0` and Debian reached the serial login prompt after
@@ -299,9 +300,8 @@ In a root shell, use the 32-bit `ethphy_select` CSR from the generated
 use the BusyBox `devmem` applet.
 
 ```sh
-ip link show eth0
-ip link set eth0 down
-busybox devmem 0xf0005000 32 1  # Tester
+ip link set eth0 up
+busybox devmem 0xf0005000 32 1  # Generator TX
 busybox devmem 0xf0005000 32    # Verify selector
 ```
 
@@ -310,12 +310,18 @@ adapter mode:
 
 ```sh
 busybox devmem 0xf000400c 32 0  # Stop generator
-busybox devmem 0xf0005000 32 0  # LiteEth
-ip link set eth0 up
+busybox devmem 0xf0005000 32 0  # LiteEth TX
 ```
 
-The mode request crosses into each GMII clock domain and takes effect
-between frames. `eth0` remains registered while the tester owns the link.
+The mode request crosses into the GMII TX clock domain and takes effect
+between frames. Keep `eth0` up to receive traffic during generator TX.
+Any queued LiteEth transmit traffic waits until selector 0 is restored.
+
+With the carrier-aware kernel and matching gateware/DTB, `eth0` reports
+`LOWER_UP` when the receiver has both clock recovery lock and 8b/10b
+synchronization. It checks the PCS status every 250 ms while the interface
+is up. Either TX source can be selected while carrier stays up. The
+existing kernel requires the carrier patch below to report these changes.
 
 ## 4. Build the patched RV64 Linux kernel
 
@@ -327,6 +333,10 @@ built in because there is no initramfs.
 cd "$OC_SRC/linux"
 git apply --check "$OC_SUPPORT/patches/linux-liteuart.patch"
 git apply "$OC_SUPPORT/patches/linux-liteuart.patch"
+git apply --check "$OC_SUPPORT/patches/linux-liteeth-link-binding.patch"
+git apply "$OC_SUPPORT/patches/linux-liteeth-link-binding.patch"
+git apply --check "$OC_SUPPORT/patches/linux-liteeth-carrier.patch"
+git apply "$OC_SUPPORT/patches/linux-liteeth-carrier.patch"
 cp "$OC_SUPPORT/linux.config" .config
 make ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- olddefconfig
 make -j"$(nproc)" ARCH=riscv CROSS_COMPILE=riscv64-linux-gnu- Image
@@ -340,7 +350,8 @@ bounds printk/early-console FIFO waits. `CONFIG_WERROR=n` permits the known
 GCC 14 warnings in old BTRFS/socket code; it does not replace the UART fix.
 
 A rebuild's version suffix/build timestamp/hash can differ. The **tested
-prebuilt Image** is in `$OC_REPORT/Image`, SHA-256:
+prebuilt Image** in `$OC_REPORT/Image` predates PCS carrier reporting.
+Its SHA-256 is:
 
 ```text
 1532939d4e49ebd7ab5307c6ec72db998dce119045b6db258025341f1993f41c

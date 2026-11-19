@@ -18,6 +18,7 @@ def add_liteeth_dts(dts, csr):
     # The fabric PCS has no MDIO bus. The Linux driver uses the MAC and buffer.
     address = csr["csr_bases"]["ethmac"]
     memory = csr["memories"]["ethmac"]
+    link = csr["csr_registers"]["ethphy_link"]["addr"]
     constants = csr["constants"]
     return dts + f"""
 &{{/chosen}} {{
@@ -27,8 +28,9 @@ def add_liteeth_dts(dts, csr):
 &{{/soc}} {{
     ethernet@{address:x} {{
         compatible = "litex,liteeth";
-        reg = <0x{address:x} 0x7c>, <0x{memory["base"]:x} 0x{memory["size"]:x}>;
-        reg-names = "mac", "buffer";
+        reg = <0x{address:x} 0x7c>, <0x{memory["base"]:x} 0x{memory["size"]:x}>,
+              <0x{link:x} 0x4>;
+        reg-names = "mac", "buffer", "link";
         interrupts = <{constants["ethmac_interrupt"]}>;
         litex,rx-slots = <{constants["ethmac_rx_slots"]}>;
         litex,tx-slots = <{constants["ethmac_tx_slots"]}>;

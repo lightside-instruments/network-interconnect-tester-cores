@@ -1,0 +1,39 @@
+diff --git a/Documentation/devicetree/bindings/net/litex,liteeth.yaml b/Documentation/devicetree/bindings/net/litex,liteeth.yaml
+index ebf4e360f..38233b40b 100644
+--- a/Documentation/devicetree/bindings/net/litex,liteeth.yaml
++++ b/Documentation/devicetree/bindings/net/litex,liteeth.yaml
+@@ -24,16 +24,26 @@ properties:
+     const: litex,liteeth
+ 
+   reg:
+-    items:
+-      - description: MAC registers
+-      - description: MDIO registers
+-      - description: Packet buffer
++    minItems: 2
++    maxItems: 3
+ 
+   reg-names:
+-    items:
+-      - const: mac
+-      - const: mdio
+-      - const: buffer
++    oneOf:
++      - items:
++          - const: mac
++          - const: mdio
++          - const: buffer
++      - items:
++          - const: mac
++          - const: buffer
++      - items:
++          - const: mac
++          - const: buffer
++          - const: link
++    description: |
++      A fabric PCS without MDIO may export a link status register instead.
++      Bit 0 indicates receive clock recovery lock and bit 1 indicates receive
++      PCS synchronization. Both bits must be set for link up.
+ 
+   interrupts:
+     maxItems: 1

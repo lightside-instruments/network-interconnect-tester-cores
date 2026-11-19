@@ -1,3 +1,17 @@
+network-interconnect-tester-cores (0.65-orangecrab-debian-eth0-2) trixie; urgency=medium
+
+  * Added the OrangeCrab 85F Debian 13 target with 128 MiB DDR3, SD boot,
+    a USB serial console, and optional external GPIO network tester cores.
+  * Exposed the shared GPIO Ethernet link as eth0 by default. The GMII mux
+    selects LiteEth or the traffic generator for transmit, while both eth0
+    and the traffic analyzer receive all ingress frames in either mode.
+  * Updated the LiteEth driver to report carrier from receive clock recovery
+    lock and 8b/10b synchronization, independently of the TX source.
+  * Preserved the UART and SD controller register addresses and validated
+    Debian boot, shared receive, and carrier loss and recovery on hardware.
+
+ -- Vladimir Vassilev <vladimir@lightside-instruments.com>  Thu, 19 Nov 2026 11:16:59 +0100
+
 network-interconnect-tester-cores (0.65-ecp5-5g-versa-1) trixie; urgency=medium
 
   * Building for lattice_versa_ecp5
