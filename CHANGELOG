@@ -1,3 +1,9 @@
+network-interconnect-tester-cores (0.65-ice4pi-1) trixie; urgency=medium
+
+  * Added operational generator-analyzer instantiation with minimal set registers accessible over SPI and serialization tx/rx over PMOD pins
+
+ -- Vladimir Vassilev <vladimir@lightside-instruments.com>  Thu, 19 Nov 2026 14:21:20 +0100
+
 network-interconnect-tester-cores (0.65-orangecrab-debian-eth0-2) trixie; urgency=medium
 
   * Added the OrangeCrab 85F Debian 13 target with 128 MiB DDR3, SD boot,
